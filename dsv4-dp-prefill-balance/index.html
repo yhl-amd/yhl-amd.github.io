@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DP Prefill 代价均衡</title>
+<meta name="description" content="DeepSeek-V4-Pro DP attention 下按 prefill 代价削块：问题、代价模型、实现与实验。">
+<style>
+:root{
+  --paper:#f5f5f0; --card:#ffffff; --ink:#152b35; --muted:#536872; --line:#ccd5d5;
+  --teal:#00796f; --teal-bg:#dceee9; --purple:#67449b; --purple-bg:#ece4f4;
+  --orange:#b25813; --orange-bg:#f8e6d2; --red:#b33838; --red-bg:#f6e0e0;
+  --wait:#e4e8e6; --code-bg:#eceee8;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#11191d; --card:#172328; --ink:#dce6e8; --muted:#93a6ad; --line:#2c3c42;
+    --teal:#3fb7aa; --teal-bg:#173a37; --purple:#b49be0; --purple-bg:#2b2340;
+    --orange:#e39a5c; --orange-bg:#3a2a1a; --red:#e07a7a; --red-bg:#3b2020;
+    --wait:#22312f; --code-bg:#1c2a2f;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:16px/1.7 "Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+main{max-width:960px;margin:0 auto;padding-block:48px 80px;padding-inline:20px}
+h1{font-size:clamp(28px,5vw,40px);line-height:1.25;letter-spacing:-.02em;margin:6px 0 14px;text-wrap:balance}
+h2{font-size:24px;line-height:1.3;margin:56px 0 14px;padding-top:18px;border-top:1px solid var(--line);text-wrap:balance}
+h3{font-size:18px;margin:28px 0 10px}
+p{margin:0 0 14px;max-width:68ch}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:600}
+.lede{font-size:18px;color:var(--muted);max-width:62ch}
+.meta{font-size:13px;color:var(--muted);margin-top:18px}
+a{color:var(--teal)}
+code,pre,.mono{font-family:Consolas,"Cascadia Code","JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
+code{font-size:.9em;color:var(--purple);background:var(--purple-bg);padding:1px 5px;border-radius:4px}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;font-size:14px;line-height:1.55;margin:0 0 16px}
+pre code{background:none;padding:0;color:var(--ink)}
+.callout{background:var(--teal-bg);border-left:4px solid var(--teal);border-radius:6px;padding:14px 18px;margin:18px 0}
+.callout p{margin:0}
+.warn{background:var(--orange-bg);border-left-color:var(--orange)}
+
+/* rank bars */
+.lanes{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 22px 12px 18px;margin:14px 0 18px;overflow:hidden}
+.lanes-title{font-size:14px;color:var(--muted);margin-bottom:10px}
+.lane{display:grid;grid-template-columns:44px 1fr;align-items:center;gap:10px;margin:5px 0}
+.lane .rk{font:13px/1 Consolas,monospace;color:var(--muted)}
+.track{position:relative;height:18px;border-radius:4px;background:transparent}
+.track .run{position:absolute;left:0;top:0;bottom:0;background:var(--teal);border-radius:4px}
+.track .run.hot{background:var(--orange)}
+.track .idle{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,var(--wait) 0 6px,transparent 6px 10px);border-radius:0 4px 4px 0}
+.track .note{position:absolute;top:50%;transform:translateY(-50%);font-size:12px;color:var(--orange);white-space:nowrap;padding-left:8px}
+.axis{display:grid;grid-template-columns:44px 1fr;gap:10px;margin-top:6px}
+.axis div:last-child{position:relative;height:18px;border-top:1px solid var(--line);font:12px Consolas,monospace;color:var(--muted)}
+.axis span{position:absolute;top:3px;transform:translateX(-50%);white-space:nowrap}
+.axis span:first-child{transform:none}
+.axis span:last-child{transform:translateX(-100%)}
+@media (max-width:640px){.axis span.minor{display:none}}
+.marker{position:absolute;top:-4px;bottom:-4px;border-left:2px dashed var(--red)}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+
+/* steps */
+.steps{counter-reset:s;list-style:none;padding:0;margin:14px 0}
+.steps li{position:relative;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px 12px 56px;margin:10px 0}
+.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:16px;top:14px;width:26px;height:26px;border-radius:50%;
+  background:var(--ink);color:var(--paper);font:600 14px/26px Consolas,monospace;text-align:center}
+.steps li.new::before{background:var(--teal)}
+.steps b{display:block;margin-bottom:2px}
+.steps p{margin:4px 0 0;color:var(--muted);font-size:15px}
+.tag{display:inline-block;font-size:11px;letter-spacing:.05em;padding:1px 7px;border-radius:10px;margin-left:8px;vertical-align:2px}
+.tag.old{background:var(--wait);color:var(--muted)} .tag.added{background:var(--teal-bg);color:var(--teal)}
+
+/* tables */
+.tbl{overflow-x:auto;margin:12px 0 18px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{padding:8px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font-weight:600;color:var(--muted);font-size:13px;background:var(--paper)}
+tbody tr:last-child td{border-bottom:0}
+td.best{color:var(--teal);font-weight:700}
+td.bad{color:var(--red);font-weight:600}
+.cmp td,.cmp th{text-align:left;white-space:normal;vertical-align:top}
+.cmp td:first-child{color:var(--muted);white-space:nowrap}
+.note-small{font-size:13px;color:var(--muted)}
+
+/* trapezoid */
+figure{margin:14px 0 18px}
+figure svg{max-width:100%;height:auto;display:block}
+figcaption{font-size:13px;color:var(--muted);margin-top:6px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:640px){.two{grid-template-columns:1fr}}
+.k{font-size:30px;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums;line-height:1.1}
+.kcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kcard .lbl{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+
+<div class="eyebrow">DeepSeek-V4-Pro · DP attention · ATOM</div>
+<h1>Prefill 代价均衡：让最慢的那张卡少做一点</h1>
+<p class="lede">DP attention 下 8 张卡每一步都要等最慢的那张。同样 16k 个新 token，接在 30 万上下文后面的那张卡，比接在 1 千上下文后面的贵将近一倍。按实际注意力代价削掉最重那张卡这一步的 prefill，挪到下一步做。</p>
+<p class="meta">yhl-amd 学习笔记 · 2026-10 · 测试机 MI355X ×8（crs-020），DSV4-Pro DSpark，DP8 + LMCache MP，并发 384，1 小时</p>
+
+<div class="two" style="margin-top:22px">
+  <div class="kcard"><div class="lbl">吞吐（vs 3 次基线均值 85,508）</div><div class="k">+3.9%</div><div class="note-small">88,857 tok/s/GPU，基线波动 ≈1.2%</div></div>
+  <div class="kcard"><div class="lbl">每用户速度 P90</div><div class="k">+7.3%</div><div class="note-small">19.38 → 20.80 tok/s/user，0 错误</div></div>
+</div>
+
+<h2>1. 问题：8 卡同步，每步都等最慢的那张</h2>
+<p><b>prefill</b> 是把输入 prompt 过一遍模型、写出 KV cache 的阶段；之后的 <b>decode</b> 一个 token 一个 token 地生成。长 prompt 会被切块，每步每卡最多 prefill <code>--max-num-batched-tokens</code> 个 token（这里是 16k）。</p>
+<p>DP attention 下，每一步 8 张卡各算自己的注意力，然后一起进入 MoE 的跨卡通信（<code>megamoe_prepare_compact</code>）。所以这一步多长，取决于最慢的那张卡。</p>
+
+<div class="lanes" role="img" aria-label="原来：7 张卡代价 60 亿，DP6 代价 110 亿，其余卡空等">
+  <div class="lanes-title">原来：每卡都做 16k token，代价（≈ 时间）不同</div>
+  <div class="lane"><span class="rk">DP0</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:45.5%"></div></div></div>
+  <div class="lane"><span class="rk">DP1</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:45.5%"></div></div></div>
+  <div class="lane"><span class="rk">DP2</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:45.5%"></div></div></div>
+  <div class="lane"><span class="rk">DP3</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:45.5%"></div></div></div>
+  <div class="lane"><span class="rk">DP4</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:45.5%"></div></div></div>
+  <div class="lane"><span class="rk">DP5</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:45.5%"></div></div></div>
+  <div class="lane"><span class="rk">DP6</span><div class="track"><div class="run hot" style="width:100%"></div></div></div>
+  <div class="lane"><span class="rk">DP7</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:45.5%"></div></div></div>
+  <div class="axis"><div></div><div><span style="left:0%">0</span><span class="minor" style="left:27.3%">30 亿</span><span style="left:54.5%">60 亿</span><span class="minor" style="left:81.8%">90 亿</span><span style="left:100%">110 亿</span></div></div>
+  <div class="legend"><span><i style="background:var(--teal)"></i>计算</span><span><i style="background:var(--orange)"></i>最慢的卡（16k 接在 30 万上下文后）</span><span><i style="background:repeating-linear-gradient(135deg,var(--wait) 0 4px,transparent 4px 7px);border:1px solid var(--line)"></i>空等</span></div>
+</div>
+
+<p>性能采样（两段各约 11 秒的 kernel trace）显示：prefill 占 GPU 时间的 50–60%；卡间注意力代价不均造成的等待约占总 GPU 时间的 6.3%，几乎全部等在 prefill 的 MoE dispatch 上。</p>
+
+<h2>2. 代价模型：注意力是个梯形</h2>
+<p>一段 prefill 从第 <code>start</code> 个 token（前面已缓存）开始，新算 <code>k</code> 个。第 i 个新 token 要看它前面所有 token，平均每个新 token 看 <code>start + k/2</code> 个。</p>
+
+<figure>
+<svg viewBox="0 0 700 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="注意力面积：start 乘 k 的矩形加上 k 平方除以 2 的三角形">
+  <rect x="40" y="40" width="300" height="140" fill="var(--purple-bg)" stroke="var(--purple)"/>
+  <polygon points="340,40 340,180 480,180" fill="var(--teal-bg)" stroke="var(--teal)"/>
+  <line x1="40" y1="200" x2="480" y2="200" stroke="var(--muted)"/>
+  <line x1="40" y1="196" x2="40" y2="204" stroke="var(--muted)"/><line x1="340" y1="196" x2="340" y2="204" stroke="var(--muted)"/><line x1="480" y1="196" x2="480" y2="204" stroke="var(--muted)"/>
+  <text x="190" y="218" text-anchor="middle" font-size="13" fill="var(--muted)">已缓存上下文 start</text>
+  <text x="410" y="218" text-anchor="middle" font-size="13" fill="var(--muted)">新 token k</text>
+  <text x="190" y="115" text-anchor="middle" font-size="15" fill="var(--purple)">k × start</text>
+  <text x="380" y="160" text-anchor="middle" font-size="14" fill="var(--teal)">k²/2</text>
+  <text x="30" y="30" font-size="13" fill="var(--muted)">每行 = 一个新 token 要看的 key（横向 = 位置）</text>
+  <text x="500" y="70" font-size="13" fill="var(--ink)">注意力面积</text>
+  <text x="500" y="92" font-size="13" fill="var(--ink)">= k × (start + k/2)</text>
+  <text x="500" y="128" font-size="13" fill="var(--muted)">再加每 token 固定开销</text>
+  <text x="500" y="148" font-size="13" fill="var(--muted)">（MLP/MoE 等）≈ k × W</text>
+</svg>
+<figcaption>新 token 第 1 个看 start 个 key，第 k 个看 start+k 个：矩形 + 三角形。</figcaption>
+</figure>
+
+<pre><code>cost(start, k) = k × (W + start + k/2)        W = 360000</code></pre>
+<p>W 来自实测：6 次 prefill 前向 × 8 卡，每卡自身（非 MoE 部分）耗时 = 70 ms + 49.8 ms/千 token + 137 ms/十亿·上下文跨度，R² = 0.99；49.8 / 137 × 10⁶ ≈ 36 万。这个公式在 6 次里 6 次都选中了最慢的卡。</p>
+
+<div class="tbl"><table>
+<thead><tr><th>同样 k = 16384</th><th>start</th><th>cost</th></tr></thead>
+<tbody>
+<tr><td>短上下文</td><td>1 千</td><td>≈ 60 亿</td></tr>
+<tr><td>长上下文</td><td>30 万</td><td>≈ 110 亿（贵将近一倍）</td></tr>
+</tbody></table></div>
+
+<h2>3. 每个调度步做什么</h2>
+<p>改动全在 ATOM 调度器里。8 张卡的调度器每一步同时执行：</p>
+<ol class="steps">
+  <li><b>要不要做 prefill？<span class="tag old">原有</span></b><p><code>PrefillDelayer</code> 做一次 CPU all_reduce，8 卡一起决定。新加一个 8 卡一致的标志 <code>any_rank_prefillable</code>。</p></li>
+  <li class="new"><b>估算本卡这一步的代价<span class="tag added">新增</span></b><p><code>_estimate_prefill_chunk_cost(16384)</code>：按 16k 预算模拟排一遍批，先算做到一半的长 prompt，再算排队的新请求；新请求用 <code>can_allocate(record=False)</code> 只查前缀缓存命中、不真分配，得到 start。</p></li>
+  <li class="new"><b>交换代价<span class="tag added">新增</span></b><p><code>gather_across_ranks()</code>：每卡在长度 8 的向量里写自己那一格，在 DP 的 gloo 组上做一次 SUM all_reduce，8 卡都拿到全部代价。只在第 1 步放行且有卡要 prefill 时调用（8 卡结论一致），闲卡报 0 也参加，保证不会有卡缺席通信。</p></li>
+  <li class="new"><b>定目标<span class="tag added">新增</span></b><p><code>target = min(最大代价, 有 prefill 的卡的平均代价 × 1.1)</code></p></li>
+  <li class="new"><b>按目标排批<span class="tag added">新增</span></b><p>每个请求能分到的 token 数，从“剩余 token 预算”改成“剩余代价额度内能放下的最大 k”（<code>_prefill_room()</code>）；累计代价碰到目标就停。每步至少做 4096 个 token，最多 16k。</p></li>
+  <li><b>没做完的留到下一步<span class="tag old">原有</span></b><p>请求停在“做了一半”的状态，下一步接着做（原有的 chunked prefill 机制，没改）。</p></li>
+</ol>
+
+<p>第 5 步里“能放下的最大 k”就是解一元二次不等式：</p>
+<pre><code>k × (W + start + k/2) ≤ 剩余额度
+⇒ k = √(a² + 2 × 剩余额度) − a        a = W + start</code></pre>
+
+<h2>4. 例子：削完之后</h2>
+<p>7 张卡代价约 60 亿，DP6 约 110 亿。均值 ≈ 66 亿，× 1.1 ≈ 73 亿，于是目标 = 73 亿。DP6：a = 36 万 + 30 万 = 66 万，k = √(66万² + 2 × 73亿) − 66万 ≈ <b>1.1 万</b> token。</p>
+
+<div class="lanes" role="img" aria-label="削块后：DP6 只做约 1.1 万 token，这一步在 73 亿处结束">
+  <div class="lanes-title">本步：DP6 只做约 1.1 万 token，其余卡不变（同一刻度）</div>
+  <div class="lane"><span class="rk">DP0</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:11.9%"></div></div></div>
+  <div class="lane"><span class="rk">DP1</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:11.9%"></div></div></div>
+  <div class="lane"><span class="rk">DP2</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:11.9%"></div></div></div>
+  <div class="lane"><span class="rk">DP3</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:11.9%"></div></div></div>
+  <div class="lane"><span class="rk">DP4</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:11.9%"></div></div></div>
+  <div class="lane"><span class="rk">DP5</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:11.9%"></div></div></div>
+  <div class="lane"><span class="rk">DP6</span><div class="track"><div class="run hot" style="width:66.4%"></div><div class="marker" style="left:66.4%"></div></div></div>
+  <div class="lane"><span class="rk">DP7</span><div class="track"><div class="run" style="width:54.5%"></div><div class="idle" style="left:54.5%;width:11.9%"></div></div></div>
+  <div class="axis"><div></div><div><span style="left:0%">0</span><span class="minor" style="left:27.3%">30 亿</span><span class="minor" style="left:54.5%">60 亿</span><span style="left:66.4%">73 亿</span><span style="left:100%">110 亿</span></div></div>
+  <div class="legend"><span><i style="border-left:2px dashed var(--red);width:2px;height:12px"></i>目标 = 均值 × 1.1</span><span>DP6 剩余约 5.4k token 下一步做</span><span>这一步约早 1/3 结束</span></div>
+</div>
+<p class="note-small">实测（16k 上限，只削不增）：2000 步里 24–32% 的步有卡被削，平均每步块大小约 14.5k。</p>
+
+<h2>5. 和“会话迁移（spill）”的区别</h2>
+<div class="tbl"><table class="cmp">
+<thead><tr><th></th><th>spill：挪会话</th><th>本方案：削块</th></tr></thead>
+<tbody>
+<tr><td>动什么</td><td>会话放在哪张卡：某卡比最轻卡多 ≥20 万 token 时，把会话迁过去</td><td>不动会话，只调这一步每卡 prefill 多少</td></tr>
+<tr><td>时间尺度</td><td>新一轮请求分配时</td><td>每个 prefill 步</td></tr>
+<tr><td>负载度量</td><td>token 数</td><td>注意力代价 k × (W + start + k/2)</td></tr>
+<tr><td>额外开销</td><td>从 LMCache 读回前缀；原卡前缀缓存浪费</td><td>每步一次 CPU 小 all_reduce，不搬数据</td></tr>
+<tr><td>结果</td><td class="bad">−1.3%（另一台机，c256，900 s）</td><td class="best">+3.9% 吞吐，每用户速度 P90 +7.3%</td></tr>
+</tbody></table></div>
+<div class="callout"><p>不均衡是<b>逐步突发</b>的：每 10 秒窗口最重卡/平均卡的 prefill 量约 1.8 倍，但 30 分钟累计各卡几乎相等（0.89–1.13）。spill 只迁走了 6.6% 的轮次，不均衡没有变；削块直接压低每一步最慢那张卡。按 token 折算的负载均衡（lreq16k）只有 +0.8%，因为同样的 token 数代价可以差一倍。</p></div>
+
+<h2>6. 实验数据</h2>
+<p class="note-small">MI355X ×8，镜像 rocm/atom-dev nightly_202610071700，DSV4-Pro DSpark，DP8 + LMCache MP，并发 384，aiperf agentic，计时 3600 s，显存利用率 0.9。每个变体 1 次，基线 3 次（第 3 次带两段约 11 秒的性能采样）。</p>
+<div class="tbl"><table>
+<thead><tr><th>变体</th><th>tok/s/GPU</th><th>vs 基线</th><th>速度 P50</th><th>速度 P90</th><th>TTFT P50</th><th>TTFT P90</th><th>ITL P50</th><th>E2E P90</th><th>成功</th></tr></thead>
+<tbody>
+<tr><td>base</td><td>84,318</td><td>−1.4%</td><td>21.18</td><td>19.18</td><td>15.07</td><td>39.25</td><td>47.21</td><td>131.9</td><td>21,202</td></tr>
+<tr><td>base_r2</td><td>86,371</td><td>+1.0%</td><td>21.37</td><td>19.69</td><td>14.44</td><td>36.98</td><td>46.79</td><td>126.9</td><td>21,743</td></tr>
+<tr><td>base_r3</td><td>85,834</td><td>+0.4%</td><td>21.33</td><td>19.26</td><td>14.70</td><td>37.20</td><td>46.88</td><td>129.6</td><td>21,622</td></tr>
+<tr><td>按上下文分配新会话</td><td>79,771</td><td class="bad">−6.7%</td><td>23.27</td><td>21.17</td><td>15.50</td><td class="bad">90.08</td><td>42.98</td><td>158.4</td><td>18,974</td></tr>
+<tr><td>同上，按 64k 折算</td><td>83,871</td><td>−1.9%</td><td>21.94</td><td>20.12</td><td>16.75</td><td>50.24</td><td>45.58</td><td>132.2</td><td>20,987</td></tr>
+<tr><td>负载均衡按 16k/请求</td><td>86,187</td><td>+0.8%</td><td>21.57</td><td>19.65</td><td>15.96</td><td>39.60</td><td>46.36</td><td>127.5</td><td>21,686</td></tr>
+<tr><td><b>削块（16k，只削不增）</b></td><td class="best">88,857</td><td class="best">+3.9%</td><td>22.33</td><td class="best">20.80</td><td>15.58</td><td>37.38</td><td class="best">44.79</td><td class="best">119.1</td><td>22,345</td></tr>
+<tr><td>削块 + 轻卡长到 32k</td><td>88,613</td><td>+3.6%</td><td>21.34</td><td>19.35</td><td class="best">13.57</td><td class="best">33.99</td><td>46.85</td><td>121.9</td><td class="best">22,356</td></tr>
+</tbody></table></div>
+<p class="note-small">速度 = 每用户 tok/s；TTFT、E2E 单位秒，ITL 单位毫秒。基线均值 85,508，标准差约 1.2%，±2% 以内视为噪声。所有变体错误数为 0。</p>
+
+<h3>放开到 32k 的坑</h3>
+<div class="callout warn"><p>让轻卡长到 32k 时，PyTorch 缓存的空闲显存块在 2.5 分钟内比实际使用多出约 44 GB，把整卡塞满（287/287 GB）。之后共享这些卡的所有进程有 40–100% 的时间被换出，服务停住几分钟。给 PyTorch 缓存设上限（物理显存 − 非 PyTorch 占用 − 2% 余量）后，完整一小时无卡顿；但吞吐和 16k 版本持平，每用户速度 P90 反而回到基线，所以推荐 16k 只削不增。</p></div>
+
+<h2>7. 开关</h2>
+<div class="tbl"><table class="cmp">
+<thead><tr><th>环境变量</th><th>默认</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td><code>ATOM_DP_PREFILL_COST_BALANCE</code></td><td>0</td><td>总开关</td></tr>
+<tr><td><code>ATOM_DP_PREFILL_BALANCE_TOKEN_WEIGHT</code></td><td>360000</td><td>W：每 token 固定开销折算成的上下文长度</td></tr>
+<tr><td><code>ATOM_DP_PREFILL_BALANCE_SLACK</code></td><td>0.1</td><td>目标 = 均值 × (1 + SLACK)</td></tr>
+<tr><td><code>ATOM_DP_PREFILL_BALANCE_MIN_TOKENS</code></td><td>4096</td><td>被削的卡每步至少做多少 token</td></tr>
+<tr><td><code>ATOM_DP_PREFILL_BALANCE_BASE_TOKENS</code></td><td>0</td><td>基准块；小于 <code>--max-num-batched-tokens</code> 时轻卡可长到上限（32k 版）</td></tr>
+</tbody></table></div>
+
+</main>
+</body>
+</html>
