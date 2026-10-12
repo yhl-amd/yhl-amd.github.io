@@ -1,0 +1,1820 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DeepSeek-V4.1-Flash 图解</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;900&display=swap">
+<style>
+/* Layout: same system as the V4 tutorial — sticky part/section rail + one reading column; figures use the full column, code scrolls inside itself.
+   Color encodes role: indigo family = CSA2 global attention (Full solid, Reindex mid, Reuse soft), teal = SWA, plum = sink,
+   vermilion = RoPE dims / things that changed for the worse, ochre = V4's HCA (only appears in V4 comparisons). */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --sunk:#eaecf0; --ink:#18202b; --muted:#596373; --rule:#d7dbe2;
+  --hca:#a86a0c; --csa:#2f4dbf; --csa-mid:#7f93dc; --swa:#0f7a60; --sink:#86479f; --rope:#c34a1f;
+  --hca-soft:#f5e7cf; --csa-soft:#e0e6f9; --swa-soft:#d6eee6; --sink-soft:#eedff4; --rope-soft:#fae1d6;
+  --font-display:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --font-body:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono","SFMono-Regular",Menlo,Consolas,"Noto Sans SC","PingFang SC",monospace;
+  --measure:46rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11151b; --surface:#181e27; --sunk:#0c1015; --ink:#e3e7ee; --muted:#98a2b2; --rule:#2a323d;
+    --hca:#e0a24a; --csa:#8aa0f3; --csa-mid:#4f63ae; --swa:#4cc3a0; --sink:#c78ce0; --rope:#f08c60;
+    --hca-soft:#3a2b13; --csa-soft:#1e2849; --swa-soft:#123830; --sink-soft:#33203d; --rope-soft:#3d2216;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11151b; --surface:#181e27; --sunk:#0c1015; --ink:#e3e7ee; --muted:#98a2b2; --rule:#2a323d;
+  --hca:#e0a24a; --csa:#8aa0f3; --csa-mid:#4f63ae; --swa:#4cc3a0; --sink:#c78ce0; --rope:#f08c60;
+  --hca-soft:#3a2b13; --csa-soft:#1e2849; --swa-soft:#123830; --sink-soft:#33203d; --rope-soft:#3d2216;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+img{max-width:100%}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.8;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration-color:var(--rule);text-underline-offset:3px}
+a:hover{text-decoration-color:currentColor}
+:focus-visible{outline:2px solid var(--csa);outline-offset:2px;border-radius:3px}
+sup,sub{font-size:.68em;line-height:0}
+code{font-family:var(--font-mono);font-size:.88em}
+p code,li code,td code{background:var(--sunk);padding:.08em .35em;border-radius:4px}
+p code,li code{overflow-wrap:anywhere}
+td code{white-space:nowrap}
+
+.shell{max-width:76rem;margin:0 auto;padding-inline:20px;display:grid;grid-template-columns:14rem minmax(0,1fr);gap:3.5rem}
+
+.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 1.5rem);align-self:start;max-height:calc(100vh - 3rem);overflow:auto;padding-block:2.25rem 1rem;font-size:13.5px;line-height:1.45}
+.toc>summary{display:none}
+.toc .part{font-size:11px;letter-spacing:.12em;color:var(--muted);margin:1.25rem 0 .4rem;font-weight:500}
+.toc .part:first-of-type{margin-top:0}
+.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:1px}
+.toc a{display:grid;grid-template-columns:2.1rem 1fr;padding:.28rem .5rem;border-radius:5px;text-decoration:none;color:var(--muted)}
+.toc a span{font-family:var(--font-mono);font-size:11.5px;padding-top:.1rem}
+.toc a:hover{color:var(--ink);background:var(--sunk)}
+.toc a[aria-current="true"]{color:var(--ink);background:var(--surface);font-weight:500;box-shadow:inset 0 0 0 1px var(--rule)}
+
+main{min-width:0;padding-block:2.25rem 5rem}
+
+.hero{padding-bottom:2.25rem;border-bottom:1px solid var(--rule)}
+.eyebrow{font-size:12px;letter-spacing:.14em;color:var(--muted);font-weight:500}
+h1{font-family:var(--font-display);font-weight:900;font-size:clamp(2rem,5vw,3.1rem);line-height:1.2;margin:.5rem 0 1rem;text-wrap:balance}
+.lede{font-size:1.08rem;max-width:var(--measure);margin:0 0 1rem}
+.source{font-size:13px;color:var(--muted);margin:0;max-width:var(--measure)}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:8px;overflow:hidden;margin:1.5rem 0 0}
+.stats div{background:var(--surface);padding:.85rem 1rem}
+.stats b{display:block;font-family:var(--font-display);font-weight:900;font-size:1.65rem;line-height:1.2;font-variant-numeric:tabular-nums}
+.stats span{font-size:12.5px;color:var(--muted);line-height:1.45;display:block;margin-top:.15rem}
+
+/* part headers: the three parts are the document's spine */
+.part-head{margin:4.5rem 0 0;padding-top:1.25rem;border-top:2px solid var(--ink)}
+.part-head .k{font-family:var(--font-mono);font-size:12.5px;color:var(--muted);letter-spacing:.06em}
+.part-head h2{font-family:var(--font-display);font-weight:900;font-size:clamp(1.7rem,3.6vw,2.3rem);line-height:1.25;margin:.2rem 0 .5rem}
+.part-head p{color:var(--muted);margin:0;max-width:var(--measure)}
+
+.sec{padding-top:2.75rem;scroll-margin-top:1rem}
+.sec-no{font-family:var(--font-mono);font-size:12.5px;color:var(--muted)}
+h3{font-family:var(--font-display);font-weight:900;font-size:clamp(1.35rem,2.6vw,1.65rem);line-height:1.35;margin:.2rem 0 .8rem;text-wrap:balance}
+h4{font-family:var(--font-display);font-weight:600;font-size:1.12rem;line-height:1.45;margin:2rem 0 .5rem;text-wrap:balance}
+.sec p,.sec ul,.sec ol{max-width:var(--measure)}
+.sec p{margin:.7rem 0}
+.sec ul,.sec ol{padding-left:1.3rem;margin:.6rem 0}
+.sec li{margin:.28rem 0}
+.sec .gist{font-size:1.04rem;color:var(--muted);margin-top:0}
+.sec .gist b{color:var(--ink)}
+
+pre{font-family:var(--font-mono);font-size:13px;line-height:1.65;background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:.9rem 1.1rem;margin:1rem 0;overflow-x:auto;max-width:100%}
+pre .c{color:var(--muted)}
+.k-csa{color:var(--csa)} .k-swa{color:var(--swa)} .k-sink{color:var(--sink)} .k-rope{color:var(--rope)}
+
+.tbl{overflow-x:auto;margin:1.1rem 0;max-width:100%}
+table{border-collapse:collapse;font-size:14px;line-height:1.55;min-width:100%}
+th,td{text-align:left;padding:.5rem .75rem;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-weight:500;color:var(--muted);font-size:12.5px;letter-spacing:.04em;border-bottom-color:var(--ink)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--font-mono);font-size:13px;white-space:nowrap}
+td.c,th.c{text-align:center}
+tr.hl td{background:var(--surface);font-weight:500}
+td.new{color:var(--csa);font-weight:500}
+td.gone{color:var(--rope)}
+
+.note{max-width:var(--measure);margin:1.25rem 0;padding:.85rem 1.1rem;background:var(--surface);border:1px solid var(--rule);border-radius:8px;font-size:14.5px;line-height:1.75}
+.note .lbl{display:inline-block;font-size:11.5px;letter-spacing:.1em;font-weight:700;margin-right:.6rem;color:var(--rope)}
+.note.calc .lbl{color:var(--muted)}
+.note p{margin:.35rem 0}
+
+.pill{display:inline-block;font-size:12px;font-weight:500;padding:.05rem .5rem;border-radius:999px;vertical-align:.08em;white-space:nowrap}
+.p-full{background:var(--csa);color:var(--surface)} .p-reindex{background:var(--csa-mid);color:var(--ink)}
+.p-reuse{background:var(--csa-soft);color:var(--csa)} .p-swa{background:var(--swa-soft);color:var(--swa)}
+.p-hca{background:var(--hca-soft);color:var(--hca)} .p-sink{background:var(--sink-soft);color:var(--sink)}
+.p-rope{background:var(--rope-soft);color:var(--rope)}
+
+figure{margin:1.5rem 0;max-width:100%}
+figcaption{font-size:13px;color:var(--muted);margin-top:.6rem;line-height:1.6;max-width:var(--measure)}
+.svgwrap{overflow-x:auto;background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:.75rem}
+.svgwrap svg{display:block;width:100%;min-width:640px;height:auto;color:var(--ink)}
+svg text{fill:currentColor;font-family:var(--font-mono);font-size:12.5px}
+svg .sm{font-size:11px;fill:var(--muted)}
+svg .hd{font-family:var(--font-body);font-size:12px;fill:var(--muted)}
+svg .ln{stroke:currentColor;stroke-width:1.3;fill:none}
+svg .dash{stroke-dasharray:4 4}
+.f-full{fill:var(--csa);stroke:var(--csa)} .f-reindex{fill:var(--csa-mid);stroke:var(--csa)} .f-reuse{fill:var(--csa-soft);stroke:var(--csa)}
+.f-comp{fill:var(--sunk);stroke:var(--muted)} .f-skip{fill:none;stroke:var(--muted);stroke-dasharray:4 4}
+.f-swa{fill:var(--swa-soft);stroke:var(--swa)}
+.t-inv{fill:var(--surface)!important}
+.r-kv{stroke:var(--csa);stroke-width:2;fill:none} .r-tk{stroke:var(--csa);stroke-width:1.5;stroke-dasharray:5 3;fill:none}
+
+.legend{display:flex;flex-wrap:wrap;gap:.35rem 1.1rem;font-size:13px;color:var(--muted);margin-top:.6rem}
+.legend span{display:inline-flex;align-items:center;gap:.4rem}
+.legend span::before{content:"";width:11px;height:11px;border-radius:2px;background:var(--sw);box-shadow:inset 0 0 0 1px var(--sb,transparent)}
+
+/* layer map */
+.lmap{display:grid;gap:.5rem;margin:1rem 0 .25rem}
+.lrow{display:grid;grid-template-columns:7rem minmax(0,1fr);gap:.75rem;align-items:center;font-size:13px}
+.lrow .nm{font-weight:500;line-height:1.3}
+.lrow .nm small{display:block;color:var(--muted);font-weight:400;font-family:var(--font-mono);font-size:11.5px}
+.lgrid{display:grid;grid-template-columns:repeat(43,minmax(0,1fr));gap:2px;align-items:end}
+.lgrid i{height:26px;border-radius:2px;display:block}
+.lgrid i.dec{margin-left:0}
+.c-swa{background:var(--swa)} .c-csa{background:var(--csa)} .c-hca{background:var(--hca)}
+.c-full{background:var(--csa)} .c-reindex{background:var(--csa-mid)} .c-reuse{background:var(--csa-soft);box-shadow:inset 0 0 0 1px var(--csa-mid)}
+.marks{display:grid;grid-template-columns:repeat(43,minmax(0,1fr));gap:2px;font-size:10px;font-family:var(--font-mono);color:var(--muted);line-height:1;height:1.6rem;align-items:end}
+.marks span{text-align:center;white-space:nowrap}
+.brk{display:grid;grid-template-columns:repeat(43,minmax(0,1fr));gap:2px;font-size:11.5px;color:var(--muted)}
+.brk span{border-top:1.5px solid var(--muted);padding-top:.2rem;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* compression rows */
+.cmp{display:grid;grid-template-columns:8.5rem minmax(0,1fr);gap:.4rem .9rem;align-items:start;font-size:12.5px;margin:1rem 0}
+.cmp .nm{font-weight:500;padding-top:.25rem;line-height:1.35}
+.cmp .nm small{display:block;color:var(--muted);font-weight:400}
+.tg{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:3px}
+.tg i{font-style:normal;font-family:var(--font-mono);font-size:10.5px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:3px;background:var(--sunk);color:var(--muted)}
+.tg b{font-weight:500;font-family:var(--font-mono);font-size:10.5px;height:20px;border-radius:3px;display:flex;align-items:center;justify-content:center;margin-top:3px;overflow:hidden;white-space:nowrap}
+.tg b.e{background:var(--csa-soft);color:var(--csa);box-shadow:inset 0 0 0 1px var(--csa-mid)}
+.tg b.v4{background:var(--hca-soft);color:var(--hca);box-shadow:inset 0 0 0 1px var(--hca)}
+.tg b.mask{background:transparent;color:var(--rope);box-shadow:inset 0 0 0 1px var(--rope)}
+
+/* byte bars */
+.bars{display:grid;grid-template-columns:8.5rem minmax(0,1fr) 5rem;gap:.6rem .9rem;align-items:center;font-size:12.5px;margin:1rem 0}
+.bars .nm{font-weight:500}
+.bars .v{font-family:var(--font-mono);text-align:right;font-variant-numeric:tabular-nums}
+.stack{display:flex;height:26px;border-radius:3px;overflow:hidden}
+.stack span{display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:10.5px;overflow:hidden;white-space:nowrap;min-width:0}
+.s-a{background:var(--csa);color:var(--surface)} .s-b{background:var(--csa-mid);color:var(--ink)} .s-c{background:var(--csa-soft);color:var(--csa)}
+.s-h{background:var(--hca-soft);color:var(--hca)}
+
+/* timelines */
+.tline{display:grid;grid-template-columns:8.5rem minmax(0,1fr);gap:.6rem .9rem;align-items:center;font-size:12.5px;margin:1rem 0}
+.tline .nm{font-weight:500;line-height:1.35}
+.tline .nm small{display:block;color:var(--muted);font-weight:400}
+.seg{display:flex;height:30px;border-radius:3px;overflow:hidden;font-family:var(--font-mono);font-size:11px}
+.seg span{display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;padding:0 .3rem;min-width:0}
+.g-cache{background:var(--csa-soft);color:var(--csa)}
+.g-replay{background:var(--swa);color:var(--surface)}
+.g-new{background:var(--sunk);color:var(--ink);box-shadow:inset 0 0 0 1px var(--rule)}
+
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .5rem;margin:1rem 0;font-size:13px}
+.flow span{font-family:var(--font-mono);font-size:12px;background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:.3rem .6rem}
+.flow span.hot{border-color:var(--csa);color:var(--csa);background:var(--csa-soft)}
+.flow em{font-style:normal;color:var(--muted);font-size:12px}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem;margin:1.25rem 0}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:1rem 1.1rem;min-width:0}
+.card h5{font-family:var(--font-display);font-weight:600;font-size:1.05rem;margin:0 0 .35rem}
+.card p{font-size:14px;line-height:1.7;margin:.35rem 0;color:var(--ink)}
+.card .ex{font-family:var(--font-mono);font-size:12px;color:var(--muted);background:var(--sunk);border-radius:5px;padding:.45rem .6rem;margin-top:.6rem;line-height:1.6;overflow-x:auto}
+
+/* hierarchical widget */
+.widget{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:1.1rem 1.25rem;margin:1.5rem 0}
+.widget .w-title{font-weight:700;font-size:14.5px;margin:0 0 .2rem;max-width:none}
+.widget .w-sub{font-size:13px;color:var(--muted);margin:0 0 1rem;max-width:none}
+.ctl{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.9rem;align-items:center;font-size:13.5px}
+.ctl output{font-family:var(--font-mono);font-size:13px;min-width:2rem;text-align:right}
+input[type=range]{accent-color:var(--ink);width:100%}
+.hrow{margin-top:1rem}
+.hrow .lab{font-size:12.5px;color:var(--muted);margin-bottom:.3rem}
+.hbars{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:5px}
+.hblk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;height:84px;align-items:end;padding:2px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--rule);position:relative}
+.hblk.cand{box-shadow:inset 0 0 0 1.5px var(--csa);background:var(--csa-soft)}
+.hblk i{display:block;background:var(--muted);border-radius:1px 1px 0 0;opacity:.55}
+.hblk.cand i{background:var(--csa);opacity:.9}
+.hblk.off i{opacity:.18}
+.hblk i.pick{background:var(--swa)!important;opacity:1!important}
+.hblk i.miss{background:var(--rope)!important;opacity:.9!important}
+.hidx{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:5px;font-family:var(--font-mono);font-size:10.5px;color:var(--muted);text-align:center;margin-top:.2rem}
+.out{font-family:var(--font-mono);font-size:13px;background:var(--sunk);border-radius:6px;padding:.6rem .8rem;margin-top:1rem;line-height:1.7;overflow-x:auto}
+
+.recap{list-style:none;padding:0!important;display:grid;gap:.6rem}
+.recap li{padding:.75rem 1rem;background:var(--surface);border:1px solid var(--rule);border-radius:7px;margin:0!important}
+footer{margin-top:4rem;padding-top:1.25rem;border-top:1px solid var(--rule);font-size:13px;color:var(--muted)}
+footer a{word-break:break-all}
+
+
+/* part-3 figures */
+.svgwrap.tall svg{min-width:760px}
+svg .sm2{font-size:11px}
+svg .ttl{font-family:var(--font-display);font-size:15px;font-weight:600}
+.f-op{fill:var(--surface);stroke:var(--muted)}
+.f-store{fill:var(--csa-soft);stroke:var(--csa)}
+.f-zero{fill:var(--rule)}
+.dot-p{fill:var(--csa-mid);stroke:var(--csa)}
+.mhc{stroke:var(--muted);stroke-width:1;opacity:.55}
+.sep{stroke:var(--ink);stroke-width:1;stroke-dasharray:6 4;fill:none}
+.w-kv{stroke:var(--csa);stroke-width:2}
+.r-kv2{stroke:var(--csa-mid);stroke-width:1.2}
+.grid{stroke:var(--rule);stroke-width:1}
+.q-c{fill:var(--csa-soft);stroke:var(--csa)} .q-r{fill:var(--sunk);stroke:var(--rule)}
+.q-p{fill:var(--swa);stroke:var(--swa)} .q-s{fill:none;stroke:var(--muted);stroke-dasharray:3 3}
+.n-new{fill:var(--csa-soft);stroke:var(--csa)} .n-kv{fill:var(--hca-soft);stroke:var(--hca);stroke-dasharray:4 3}
+.n-tk{fill:var(--rope-soft);stroke:var(--rope);stroke-dasharray:4 3} .n-op{fill:var(--surface);stroke:var(--muted)}
+.segc{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden;margin-bottom:.6rem}
+.segc button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--muted);padding:.3rem .8rem;cursor:pointer}
+.segc button+button{border-left:1px solid var(--rule)}
+.segc button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.gen{display:grid;gap:.15rem;margin:1rem 0;font-size:12.5px}
+.g-row{display:grid;grid-template-columns:8.5rem minmax(0,1fr) 5rem;gap:.9rem;align-items:center}
+.g-nm{font-weight:500;line-height:1.3}
+.g-nm small{display:block;color:var(--muted);font-weight:400;font-family:var(--font-mono);font-size:11px}
+.g-track{height:24px;position:relative;background-image:linear-gradient(to right,var(--rule) 1px,transparent 1px);background-size:25% 100%;border-right:1px solid var(--rule)}
+.g-track span{display:block;height:100%;background:var(--muted);opacity:.55;border-radius:0 4px 4px 0}
+.g-row.hl .g-track span{background:var(--csa);opacity:1}
+.g-v{font-family:var(--font-mono);text-align:right;font-variant-numeric:tabular-nums}
+.g-row.hl .g-v{font-weight:600}
+.g-step{margin-left:calc(8.5rem + .9rem);font-family:var(--font-mono);font-size:11px;color:var(--muted);padding-left:.2rem}
+.g-axis{position:relative;height:1.2rem;margin:.2rem calc(5rem + .9rem) 0 calc(8.5rem + .9rem);font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.g-axis span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.nibwrap{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:.9rem 1rem;margin-top:1rem}
+.nib-title{font-size:12.5px;color:var(--muted);margin-bottom:.4rem}
+.nib{display:grid;grid-template-columns:repeat(16,minmax(0,1fr)) 4.5rem;gap:2px}
+.nib span{font-family:var(--font-mono);font-size:10px;height:26px;display:flex;align-items:center;justify-content:center;background:var(--csa);color:var(--surface);border-radius:2px}
+.nib span.sc{background:var(--csa-mid);color:var(--ink)}
+.nib-note{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin:.4rem 0 .8rem}
+.bits{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:12.5px}
+.bits span{font-family:var(--font-mono);width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:3px;font-weight:600}
+.b-s{background:var(--rope-soft);color:var(--rope)} .b-e{background:var(--csa-soft);color:var(--csa)} .b-m{background:var(--swa-soft);color:var(--swa)}
+.bits em{font-style:normal;color:var(--muted);margin-left:.5rem;flex:1 1 16rem;min-width:0}
+.s-r{background:var(--rope-soft);color:var(--rope)} .s-x{background:var(--rule)}
+table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight:400}
+
+.dgrid{display:grid;grid-template-columns:2.2rem repeat(32,minmax(0,1fr));gap:2px;margin-top:.9rem;font-family:var(--font-mono);font-size:10.5px;color:var(--muted);align-items:center}
+.dgrid .rl{text-align:right;padding-right:.35rem}
+.dgrid .ch{text-align:center;font-size:9.5px;white-space:nowrap}
+.dgrid i{display:block;height:20px;border-radius:2px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--rule)}
+.dgrid i.need{background:var(--csa-mid);box-shadow:none}
+.dgrid i.tgt{background:var(--ink);box-shadow:none}
+.dgrid i.new{background:var(--csa);box-shadow:none}
+.dgrid i.ring{background:var(--swa-soft);box-shadow:inset 0 0 0 1.5px var(--swa)}
+.dgrid i.old{background:var(--sunk);box-shadow:none}
+.dgrid i.rep{background:var(--swa);box-shadow:none}
+.dgrid i.cut{background:repeating-linear-gradient(135deg,var(--rope-soft) 0 3px,transparent 3px 6px);box-shadow:inset 0 0 0 1px var(--rope)}
+.bar-w{fill:var(--csa-mid)}
+.segc{flex-wrap:wrap;max-width:100%}
+.n-apx{fill:var(--rope-soft);stroke:var(--rope)} .f-skip{fill:none;stroke:var(--muted);stroke-dasharray:4 3}
+.bar-cut{fill:none;stroke:var(--rope);stroke-dasharray:3 2}
+@media (max-width:60rem){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc{position:static;max-height:none;padding-block:1rem 0}
+  .toc>summary{display:block;cursor:pointer;font-weight:500;font-size:14px;padding:.6rem .8rem;background:var(--surface);border:1px solid var(--rule);border-radius:7px}
+  .toc[open]>summary{margin-bottom:.8rem}
+  main{padding-top:1.5rem}
+}
+@media (max-width:34rem){
+  .shell{padding-inline:16px}
+  .lrow,.cmp,.tline{grid-template-columns:minmax(0,1fr);gap:.3rem}
+  .bars{grid-template-columns:minmax(0,1fr) 4.2rem}
+  .bars .nm{grid-column:1 / -1;margin-bottom:-.4rem}
+  .tg i{font-size:8px}
+  .tg b{font-size:8.5px}
+  .marks{font-size:8px}
+  .hblk{height:64px}
+  .g-row{grid-template-columns:5.5rem minmax(0,1fr) 3.8rem;gap:.5rem}
+  .g-step{margin-left:6rem}
+  .g-axis{margin:.2rem 4.3rem 0 6rem;font-size:9px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+<details class="toc" open>
+  <summary>目录</summary>
+  <nav aria-label="章节">
+    <div class="part">第一部分 · 概览</div>
+    <ol>
+      <li><a href="#what"><span>1.1</span>V4.1-Flash 是什么</a></li>
+      <li><a href="#diff"><span>1.2</span>相比 V4 改了什么</a></li>
+      <li><a href="#why"><span>1.3</span>为什么这么改：三条主线</a></li>
+      <li><a href="#notes"><span>1.4</span>V4 笔记哪些还成立</a></li>
+    </ol>
+    <div class="part">第二部分 · 重点</div>
+    <ol>
+      <li><a href="#k-ced"><span>2.1</span>CED：前半读、后半写</a></li>
+      <li><a href="#k-share"><span>2.2</span>CSA2：一份 KV 多层共用</a></li>
+      <li><a href="#k-comp"><span>2.3</span>压缩变简单了</a></li>
+      <li><a href="#k-hier"><span>2.4</span>分层 indexer</a></li>
+      <li><a href="#k-fp4"><span>2.5</span>FP4 主 KV</a></li>
+      <li><a href="#k-replay"><span>2.6</span>SWA Bounded Replay</a></li>
+      <li><a href="#k-ext"><span>2.7</span>mHC、Engram、DSpark</a></li>
+    </ol>
+    <div class="part">第三部分 · 精讲</div>
+    <ol>
+      <li><a href="#d-arch"><span>3.1</span>逐层架构（图 3）</a></li>
+      <li><a href="#d-ced"><span>3.2</span>CED 的四种场景</a></li>
+      <li><a href="#d-csa2"><span>3.3</span>CSA2 三种模式（图 4）</a></li>
+      <li><a href="#d-index"><span>3.4</span>分层 indexer（图 5、图 2）</a></li>
+      <li><a href="#d-fp4"><span>3.5</span>FP4 与 890 B（图 1b）</a></li>
+      <li><a href="#d-replay"><span>3.6</span>SWA 依赖链与 Bounded Replay</a></li>
+      <li><a href="#d-mhc"><span>3.7</span>Single-Pass mHC</a></li>
+      <li><a href="#d-engram"><span>3.8</span>Engram</a></li>
+      <li><a href="#d-dspark"><span>3.9</span>DSpark</a></li>
+      <li><a href="#d-moe"><span>3.10</span>MoE 与多模态</a></li>
+      <li><a href="#d-deploy"><span>3.11</span>部署与代码生态</a></li>
+      <li><a href="#d-open"><span>附</span>未确认的问题与来源</a></li>
+    </ol>
+  </nav>
+</details>
+
+<main>
+
+<header class="hero">
+  <div class="eyebrow">DeepSeek-V4.1-Flash · 相对 V4 的变化</div>
+  <h1>DeepSeek-V4.1-Flash 图解</h1>
+  <p class="lede">V4.1-Flash 是 DeepSeek 新架构家族里最小的模型，从头训练，不是 V4 的微调。它要解决的是 agent 场景的成本问题：输入远比输出多，prefill 算力和 KV cache 的存储都很贵。为此它把 prefill 的层数砍掉一半，HBM 里的 KV 压到约 1/4，落盘的 KV 压到约 1/8。</p>
+  <p class="source">来源：技术报告 arXiv 2609.19969、HF 仓库里的 <code>config.json</code> 和官方参考代码 <code>inference/model.py</code>、vLLM 部署博客。标“推算”的数字是我按 config 算的，论文里没有直接给出。</p>
+  <div class="stats">
+    <div><b>890 B</b><span>每 token 全局 KV，约 V4-Flash 的 1/4</span></div>
+    <div><b>≈ 1/8</b><span>落盘（SSD / host）的持久 KV，相对 V4-Flash</span></div>
+    <div><b>8B / 16B</b><span>每 token 激活参数：prefill / decode</span></div>
+    <div><b>4 / 40</b><span>真正产出全局 KV 的层数</span></div>
+  </div>
+</header>
+
+<!-- ====================== PART 1 ====================== -->
+<div class="part-head">
+  <div class="k">第一部分</div>
+  <h2>概览：V4.1 是什么，改了什么</h2>
+  <p>先建立整体印象。看完这一部分，你应该能用三句话向别人讲清 V4.1 相对 V4 的变化。</p>
+</div>
+
+<section class="sec" id="what">
+  <div class="sec-no">1.1</div>
+  <h3>V4.1-Flash 是什么</h3>
+  <ul>
+    <li><b>原生多模态 MoE</b>：输入图和文本，输出文本。主干 552B 参数，另有 196B 的 Engram 查表参数，激活参数 prefill 时 8B、decode 时 16B。</li>
+    <li><b>40 层</b>：前 20 层叫因果编码器，后 20 层叫解码器（CED）。它仍是 decoder-only 那样的因果模型，“编码器”只是前半部分层的名字，不是 BERT 那种双向编码器（见 2.1）。hidden size 5120，上下文 1M。</li>
+    <li><b>从头训练</b>：45T token 的图文语料，稀疏注意力在 64K 长度上训练，34T token 时扩到 1M。后训练仍是 SFT → RL → OPD。</li>
+    <li><b>推理强度</b>可以设成 1–100 之间的任意整数，取代 V4 的固定三档。</li>
+    <li>MIT 协议开源。API 名称为 <code>deepseek-flash</code>，V4-Flash 已下线并临时转发到 V4.1-Flash。</li>
+  </ul>
+
+  <figure>
+    <div class="lmap" id="lmap" role="img" aria-label="层地图。V4-Flash 43 层：前 2 层纯 SWA，之后 CSA 与 HCA 交错。V4.1-Flash 40 层：前 2 层纯 SWA；编码器 2 到 19 层每 6 层一组，组首 Full，其余 Reuse；解码器 20 到 39 层每 4 层一组，第 20 层 Full，24、28、32、36 层 Reindex，其余 Reuse。Engram 在第 1 和第 14 层，DSpark 读取第 37 到 39 层。"></div>
+    <div class="legend">
+      <span style="--sw:var(--swa)">纯 SWA</span>
+      <span style="--sw:var(--csa)">V4：CSA ｜ V4.1：Full</span>
+      <span style="--sw:var(--hca)">V4：HCA</span>
+      <span style="--sw:var(--csa-mid)">V4.1：Reindex</span>
+      <span style="--sw:var(--csa-soft);--sb:var(--csa-mid)">V4.1：Reuse</span>
+    </div>
+    <figcaption>一格一层，两行按同一刻度对齐。V4 每层都自己算 KV；V4.1 只有 4 个 Full 层（第 2、8、14、20 层）算 KV，其余层借用。▲ 是 Engram 所在层，◆ 是 DSpark 读取隐状态的层。悬停可看层号。</figcaption>
+  </figure>
+</section>
+
+<section class="sec" id="diff">
+  <div class="sec-no">1.2</div>
+  <h3>相比 V4-Flash 改了什么</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>方面</th><th>V4-Flash</th><th>V4.1-Flash</th></tr></thead>
+    <tbody>
+      <tr><td>骨架</td><td>43 层 decoder-only，hidden 4096</td><td class="new">40 层 = 20 层编码器 + 20 层解码器（CED），仍是因果模型，hidden 5120</td></tr>
+      <tr><td>参数</td><td>284B，激活 13B</td><td class="new">552B + 196B Engram，激活 8B（prefill）/ 16B（decode）</td></tr>
+      <tr><td>全局注意力</td><td>CSA（m=4）与 HCA（m=128）交错</td><td class="new">只有 CSA2：编码器 m=2，解码器 m=1（不压缩）；<b>HCA 删除</b></td></tr>
+      <tr><td>层间关系</td><td>每层自己算 KV、自己选 top-k</td><td class="new">Full / Reindex / Reuse 三种模式，跨层共享 KV、indexer K、top-k</td></tr>
+      <tr><td>压缩器</td><td>a/b 两路重叠窗口（2m）+ 位置偏置 B</td><td class="new">不重叠分组，无位置偏置</td></tr>
+      <tr><td>Indexer</td><td>64 head；K 走一条独立的压缩路径</td><td class="new">32 head；K 从主 KV 投影；解码器加分层候选池</td></tr>
+      <tr><td>主 KV 精度</td><td>NoPE 448 维 FP8 + RoPE 64 维 BF16</td><td class="new">全部 FP4（E2M1 + 每 16 通道一个 E4M3 scale）</td></tr>
+      <tr><td>每 token 全局 KV</td><td>3,514 B（论文图 1b）</td><td class="new">890 B</td></tr>
+      <tr><td>SWA 持久化</td><td>生产中在 prompt 末尾和输出末尾各存一份 SWA</td><td class="new">不落盘；缺失时只重放最后 128 个 token（Bounded Replay）</td></tr>
+      <tr><td>残差</td><td>mHC</td><td class="new">Single-Pass mHC，访存减半</td></tr>
+      <tr><td>MoE</td><td>256 routed，中间维 2048，前 3 层 hash 路由</td><td class="new">384 routed，中间维 2304，无 hash 路由，图像 token 单独一套 bias</td></tr>
+      <tr><td>记忆模块</td><td>无</td><td class="new">Engram：n-gram 哈希查表，表放 host 内存</td></tr>
+      <tr><td>投机解码</td><td>1 层 MTP</td><td class="new">DSpark：3 个 block，一次草拟 5 个 token</td></tr>
+      <tr><td>多模态</td><td>纯文本（另有实验版 vision）</td><td class="new">原生多模态，DeepSeek-ViT 编码器</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>没变的部分</h4>
+  <p>单层 attention 的“内核”几乎原样保留：</p>
+  <ul>
+    <li>shared-KV MQA：1 个 KV head，head_dim 512，同一份 KV 既当 K 又当 V；</li>
+    <li>partial RoPE（最后 64 维）和输出端 inverse RoPE；</li>
+    <li><code>attn_sink</code>，以及 SWA 与压缩 KV 在<b>同一次 softmax</b> 里竞争；</li>
+    <li>grouped output projection（8 组 × 1024）、SWA 窗口 128、前 2 层纯 SWA；</li>
+    <li>indexer 的 ReLU 加权打分和 FP4 量化，top-k 512；</li>
+    <li>MoE 的 <code>sqrtsoftplus</code> 打分、noaux_tc 均衡、1 个共享 + 6 个激活专家、专家权重 FP4；</li>
+    <li>1M 上下文的 YaRN 设置（factor 16、原始长度 65536）。</li>
+  </ul>
+</section>
+
+<section class="sec" id="why">
+  <div class="sec-no">1.3</div>
+  <h3>为什么这么改：三条主线</h3>
+  <p>论文的出发点是 agent 负载：频繁的工具调用会带来大量 prefill，KV cache 一旦没命中，重算代价很高；长上下文又让 HBM 和 SSD 的容量、带宽都吃紧。所有改动都能归到下面三条线上：</p>
+  <div class="tbl"><table>
+    <thead><tr><th>要省的东西</th><th>主要手段</th><th>效果</th></tr></thead>
+    <tbody>
+      <tr><td>prefill 算力</td><td>CED：prompt 的大部分 token 只跑前 21 层</td><td>prefill 激活 8B，约为 decode 的一半</td></tr>
+      <tr><td>HBM 里的全局 KV</td><td>CSA2 跨层共享（40 层里只有 4 层存 KV）+ FP4</td><td>890 B/token，约 1/4</td></tr>
+      <tr><td>SSD 上的持久 KV</td><td>SWA 不落盘，靠 Bounded Replay 近似重建</td><td>约 1/8</td></tr>
+    </tbody>
+  </table></div>
+  <p>另外还有三个“顺手的效率扩展”：Single-Pass mHC 把残差混合的访存减半；Engram 用便宜的查表换一部分容量；DSpark 用更强的投机解码提升 decode 速度。</p>
+</section>
+
+<section class="sec" id="notes">
+  <div class="sec-no">1.4</div>
+  <h3>你的 V4 笔记，哪些对 V4.1 还成立</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>V4 笔记里的概念</th><th>在 V4.1</th></tr></thead>
+    <tbody>
+      <tr><td>CSA / HCA 按层交错</td><td class="gone">不成立：HCA 删除，全部是 CSA2</td></tr>
+      <tr><td>CSA 的 a/b 重叠压缩、<code>B^a/B^b</code></td><td class="gone">不成立：改为不重叠分组，无位置偏置</td></tr>
+      <tr><td>Indexer K 单独压缩一份</td><td class="gone">改了：从主 KV 投影</td></tr>
+      <tr><td>RoPE 维度必须 BF16</td><td class="gone">不成立：RoPE 维度也存 FP4，RoPE 之后再量化</td></tr>
+      <tr><td>前 3 层 MoE 用 hash 路由</td><td class="gone">不成立：config 里没有 hash 层，代码里也没有</td></tr>
+      <tr><td>SWA 的三种落盘策略（Full / Periodic / Zero）</td><td class="gone">被 Bounded Replay 取代</td></tr>
+      <tr><td>mHC 公式 <code>F_l(A_l · X_l)</code></td><td class="gone">改为 <code>F_l(A_{l−1} · X_l)</code></td></tr>
+      <tr><td>Shared-KV MQA、partial RoPE + inverse RoPE</td><td>成立</td></tr>
+      <tr><td>SWA 旁支 + sink，与主路同一次 softmax</td><td>成立</td></tr>
+      <tr><td>Lightning Indexer：ReLU 加权、FP4、top-k</td><td>成立（head 数从 64 减到 32）</td></tr>
+      <tr><td>Grouped output projection</td><td>成立（8 组 × 1024）</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ====================== PART 2 ====================== -->
+<div class="part-head">
+  <div class="k">第二部分</div>
+  <h2>重点：七个改动，各用一张图看懂</h2>
+  <p>每节讲清“做了什么、为什么省”，配一个小例子。细节放到第三部分。</p>
+</div>
+
+<section class="sec" id="k-ced">
+  <div class="sec-no">2.1</div>
+  <h3>CED：前 20 层负责读，后 20 层负责写</h3>
+  <p class="gist">先说结论：<b>V4.1 本质上还是 decoder-only 那样的因果模型</b>，和 GPT、V3、V4 一样一个一个往外生成 token。这里的“编码器 / 解码器”，只是把 40 层从中间切成两半后给两半起的名字，和 BERT、翻译模型里的编码器不是一回事。</p>
+
+  <h4>和你熟悉的编码器-解码器有什么不同</h4>
+  <div class="tbl"><table>
+    <thead><tr><th></th><th>翻译模型（原版 Transformer、T5）</th><th>BERT</th><th>V4.1 的 CED</th></tr></thead>
+    <tbody>
+      <tr><td>编码器能看哪里</td><td>双向：每个词能看整句</td><td>双向</td><td class="new">因果：每个 token 只能看它前面的 token</td></tr>
+      <tr><td>序列</td><td>两条：原文进编码器，译文进解码器</td><td>一条，只做理解，不生成</td><td class="new">一条：prompt 和生成的 token 首尾相接</td></tr>
+      <tr><td>生成的 token 过不过编码器</td><td>不过</td><td>—</td><td class="new">过：decode 时每个新 token 都走完全部 40 层</td></tr>
+      <tr><td>解码器怎么看输入</td><td>cross-attention 看编码器的输出</td><td>—</td><td class="new">后 20 层回头看历史时，用的全局 KV 统一由第 20 层根据前 20 层的输出生成</td></tr>
+      <tr><td>层栈</td><td>两个独立的层栈</td><td>一个层栈</td><td class="new">一个 40 层的层栈，从中间切开</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>切成两半，只改了一件事</h4>
+  <p>每一层回头看历史 token 时，看的是这些 token 在<b>本层</b>留下的笔记（KV）。在普通的 decoder-only 模型里，token t 在第 l 层的笔记由它在第 l 层的隐状态算出来。所以要让 40 层都有笔记，prompt 的每个 token 都必须走完 40 层。</p>
+  <p>V4.1 改的就是这一点：<b>后 20 层用的全局笔记，不再由每层自己写，而是统一由第 20 层根据前 20 层的输出写一份</b>，后面各层共用。（这和 2.2 节讲的“组长写笔记、组员共用”是同一个思路：第 20 层就是整个解码器的组长。）</p>
+
+  <h4>编码器 m=2、解码器 m=1，结构不一样，不用重算吗？</h4>
+  <p>需要算，但不是“重算”：编码器和解码器用的是<b>两份不同的 KV</b>，各算各的。解码器的 m=1 KV 不是从编码器的 m=2 KV 转换来的。</p>
+  <div class="tbl"><table>
+    <thead><tr><th></th><th>编码器 KV①②③</th><th>解码器 KV④</th></tr></thead>
+    <tbody>
+      <tr><td>谁算</td><td>L2、L8、L14</td><td>L20</td></tr>
+      <tr><td>输入</td><td>各自那一层的隐状态</td><td>H<sub>20</sub>，也就是编码器的输出</td></tr>
+      <tr><td>压缩率</td><td>m=2</td><td>m=1（不压缩）</td></tr>
+      <tr><td>给谁用</td><td>编码器各层</td><td>解码器 L20–39</td></tr>
+      <tr><td>每 token 存储</td><td>3 × 178 B</td><td>356 B</td></tr>
+    </tbody>
+  </table></div>
+  <p>两份加起来就是 890 B/token。</p>
+  <p><b>KV④ 很便宜：每个 token 只做一次投影</b>，不需要 attention，也不需要 MoE。L20 的压缩器在 m=1 时就是：</p>
+<pre>if ratio == 1:
+    return self.norm(self.wkv(x))   <span class="c"># 5120 → 512，再 RMSNorm；之后加 RoPE、量化成 FP4</span></pre>
+  <p>另外再投影一次得到 indexer K（512 → 128）。所以 prompt 里每个 token 的成本是：编码器 20 层整层计算 + KV④ 一次投影；解码器后 19 层跳过（最后 128 个 token 除外）。论文的说法也是这个意思：只算前一半层，就能以很小的代价拿到上半部分的全局 KV。</p>
+  <p>实际部署中，vLLM 让 L20 整层对所有 token 都跑一遍，CUDA graph 把 0–20 层放在一起捕获。这比只做一次投影多一些，但也只多了 1 层。</p>
+
+  <p>画成图就是这样：第 20 层用编码器的输出给全部 prompt token 写好全局 KV，后 19 层只处理最后 128 个 prompt token 和新生成的 token。</p>
+
+  <figure>
+    <div class="svgwrap">
+      <svg viewBox="0 0 800 330" role="img" aria-label="横轴是 token，纵轴是层。编码器 0 到 19 层和第 20 层处理全部 prompt token；解码器 21 到 39 层只处理 prompt 最后 128 个 token 和新生成的 token，其余区域跳过。第 20 层生成的全局 KV 供解码器各层使用。">
+        <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <!-- encoder 0-19 : y 160..280 -->
+        <rect class="f-comp" x="110" y="160" width="490" height="120"/>
+        <text x="355" y="216" text-anchor="middle">编码器 0–19 层</text>
+        <text class="sm" x="355" y="234" text-anchor="middle">处理全部 prompt token</text>
+        <!-- layer 20 : y 152..160 -->
+        <rect class="f-full" x="110" y="152" width="490" height="8"/>
+        <!-- decoder skipped : y 38..152 -->
+        <rect class="f-skip" x="110" y="38" width="458" height="110"/>
+        <text x="339" y="90" text-anchor="middle" style="fill:var(--muted)">跳过</text>
+        <text class="sm" x="339" y="108" text-anchor="middle">解码器不处理 prompt 的前 N − 128 个 token</text>
+        <!-- replay sliver -->
+        <rect class="f-swa" x="570" y="38" width="30" height="114"/>
+        <!-- generated -->
+        <rect class="f-comp" x="604" y="38" width="86" height="242"/>
+        <rect class="f-full" x="604" y="152" width="86" height="8"/>
+        <text x="647" y="216" text-anchor="middle">decode</text>
+        <text class="sm" x="647" y="234" text-anchor="middle">全部 40 层</text>
+        <!-- KV arrow -->
+        <path class="ln" d="M520,152 C520,120 640,125 640,92" marker-end="url(#a1)"/>
+        <text class="sm" x="514" y="132" text-anchor="end">全局 KV</text>
+        <!-- left labels -->
+        <text class="sm" x="100" y="44" text-anchor="end">39</text>
+        <text class="sm" x="100" y="148" text-anchor="end">21</text>
+        <text class="sm" x="100" y="160" text-anchor="end" style="fill:var(--csa)">20</text>
+        <text class="sm" x="100" y="278" text-anchor="end">0</text>
+        <text class="hd" x="30" y="100" text-anchor="middle">解码器</text>
+        <text class="hd" x="30" y="222" text-anchor="middle">编码器</text>
+        <!-- right labels -->
+        <text class="sm" x="700" y="159" style="fill:var(--csa)">← 第 20 层生成</text>
+        <text class="sm" x="714" y="173" style="fill:var(--csa)">全局 KV（m=1）</text>
+        <text class="sm" x="700" y="64" style="fill:var(--swa)">← 最后 128 个</text>
+        <text class="sm" x="714" y="78" style="fill:var(--swa)">prompt token</text>
+        <text class="sm" x="714" y="92" style="fill:var(--swa)">补算 SWA KV</text>
+        <!-- axis -->
+        <line class="ln" x1="110" y1="296" x2="690" y2="296"/>
+        <text class="sm" x="110" y="314">prompt token 0</text>
+        <text class="sm" x="566" y="314" text-anchor="end">N − 128</text>
+        <text class="sm" x="602" y="314" text-anchor="end">N</text>
+        <text class="sm" x="647" y="314" text-anchor="middle">生成</text>
+      </svg>
+    </div>
+    <figcaption>横轴是 token，纵轴是层，涂色的格子才需要计算。为了能看清，最后 128 个 token 的那条画宽了，不按比例。</figcaption>
+  </figure>
+
+  <p><b>例子</b>：一个 100K token 的 prompt，用“层数 × token 数”粗略衡量 prefill 计算量：</p>
+  <div class="tbl"><table>
+    <thead><tr><th>prompt 长度</th><th class="n">不用 CED（40 层 × N）</th><th class="n">CED（21 层 × N + 19 层 × 128）</th><th class="n">比例</th></tr></thead>
+    <tbody>
+      <tr><td>1K</td><td class="n">40,960</td><td class="n">23,936</td><td class="n">58%</td></tr>
+      <tr><td>8K</td><td class="n">327,680</td><td class="n">174,464</td><td class="n">53%</td></tr>
+      <tr class="hl"><td>100K</td><td class="n">4,000,000</td><td class="n">2,102,432</td><td class="n">53%</td></tr>
+    </tbody>
+  </table></div>
+  <p>这里第 20 层也处理全部 token，因为全局 KV 要由它来生成（vLLM 的实现正是这样）。decode 阶段每个新 token 仍然走完全部 40 层，所以是“prefill 8B、decode 16B”。</p>
+</section>
+
+<section class="sec" id="k-share">
+  <div class="sec-no">2.2</div>
+  <h3>CSA2：一份 KV，多层共用</h3>
+  <p class="gist">一句话：相邻几层编成一组，<b>组长负责写笔记、挑重点，组员直接用组长的成果</b>，只做自己的那份阅读。要理解这句话，先看 V4 里每一层在做什么。</p>
+
+  <h4>先看 V4：每一层都要做三件事</h4>
+  <p>模型生成下一个 token 时，每一层都要回头看前面所有 token，从中找有用的信息。可以这样想：每个历史 token 在每一层都留下一条<b>笔记</b>（就是 KV），每一层有<b>自己的一本笔记本</b>（这一层的 KV cache）。上下文有 100 万个 token 时，笔记太多，不可能每条都细看，所以 V4 的每个 CSA 层都分三步：</p>
+  <div class="tbl"><table>
+    <thead><tr><th>步骤</th><th>做什么</th><th>术语</th></tr></thead>
+    <tbody>
+      <tr><td>① 写笔记</td><td>把历史 token 压缩成笔记，存进本层的笔记本</td><td>压缩 KV、KV cache</td></tr>
+      <tr><td>② 挑笔记</td><td>用一个便宜的打分器给所有笔记快速打分，挑出最相关的 512 条</td><td>indexer、top-k</td></tr>
+      <tr><td>③ 读笔记</td><td>带着本层自己的问题，仔细读这 512 条，得出结论</td><td>attention，用本层的 Q</td></tr>
+    </tbody>
+  </table></div>
+  <p>V4 里每个 CSA 层都把这三步完整做一遍。</p>
+
+  <h4>V4.1 的想法：组长做①②，组员只做③</h4>
+  <p>相邻几层写出来的笔记很像，挑出来的 512 个位置也很像，每层各做一遍是重复劳动。于是 V4.1 把相邻的层编成一组。三种模式的区别，就是各自做了哪几步：</p>
+  <div class="tbl"><table>
+    <thead><tr><th>模式</th><th>① 写笔记</th><th>② 挑笔记</th><th>③ 读笔记</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill p-full">Full</span>（组长）</td><td>自己写</td><td>自己挑</td><td>自己读</td></tr>
+      <tr><td><span class="pill p-reindex">Reindex</span></td><td>用组长的笔记</td><td><b>自己重新挑</b></td><td>自己读</td></tr>
+      <tr class="hl"><td><span class="pill p-reuse">Reuse</span></td><td>用组长的笔记</td><td><b>用别人挑好的</b></td><td>自己读</td></tr>
+    </tbody>
+  </table></div>
+  <p>所以 <b>Reuse 就是只做第③步的层</b>：笔记本是别人的，读哪 512 条也是别人定的，它只负责带着自己的问题去读。40 层里有 30 层是 Reuse。</p>
+
+  <h4>例子：编码器第 2–7 层处理 token #2000</h4>
+  <ol>
+    <li><b>第 2 层（Full，组长）</b>：把历史 token 压缩成笔记存起来；打分后挑出 512 个位置，比如 {15, 230, 871, …}；再带着自己的问题读这 512 条。</li>
+    <li><b>第 3 层（Reuse）</b>：不写笔记，也不打分。直接翻开第 2 层的笔记本，读 {15, 230, 871, …} 这 512 条。它带的是自己的问题（自己的 Q），所以读出来的结论和第 2 层不一样。</li>
+    <li><b>第 4–7 层</b>：和第 3 层一样。</li>
+  </ol>
+
+  <figure>
+    <div class="svgwrap">
+      <svg viewBox="0 0 780 255" role="img" aria-label="上：编码器第一组，第 2 层 Full 生成主 KV 和 top-k，第 3 到 7 层 Reuse 全部借用。下：解码器，第 20 层 Full 生成主 KV 供 21 到 27 层使用；第 21 到 23 层借用第 20 层的 top-k；第 24 层 Reindex 自己选 top-k，第 25 到 27 层借用第 24 层的 top-k。">
+        <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--csa)"/></marker></defs>
+        <text class="hd" x="40" y="16">编码器第 1 组（层 2–7，m = 2）</text>
+        <!-- row A boxes y 50..90 -->
+        <rect class="f-full" x="40" y="50" width="100" height="40" rx="5"/>
+        <text class="t-inv" x="90" y="67" text-anchor="middle">L2</text>
+        <text class="t-inv" x="90" y="82" text-anchor="middle" font-size="11">Full</text>
+        <g>
+          <rect class="f-reuse" x="160" y="50" width="100" height="40" rx="5"/><text x="210" y="67" text-anchor="middle">L3</text><text class="sm" x="210" y="82" text-anchor="middle">Reuse</text>
+          <rect class="f-reuse" x="280" y="50" width="100" height="40" rx="5"/><text x="330" y="67" text-anchor="middle">L4</text><text class="sm" x="330" y="82" text-anchor="middle">Reuse</text>
+          <rect class="f-reuse" x="400" y="50" width="100" height="40" rx="5"/><text x="450" y="67" text-anchor="middle">L5</text><text class="sm" x="450" y="82" text-anchor="middle">Reuse</text>
+          <rect class="f-reuse" x="520" y="50" width="100" height="40" rx="5"/><text x="570" y="67" text-anchor="middle">L6</text><text class="sm" x="570" y="82" text-anchor="middle">Reuse</text>
+          <rect class="f-reuse" x="640" y="50" width="100" height="40" rx="5"/><text x="690" y="67" text-anchor="middle">L7</text><text class="sm" x="690" y="82" text-anchor="middle">Reuse</text>
+        </g>
+        <!-- top-k rail above -->
+        <path class="r-tk" d="M90,50 V34 H690"/>
+        <path class="r-tk" d="M210,34 V48" marker-end="url(#a2)"/><path class="r-tk" d="M330,34 V48" marker-end="url(#a2)"/>
+        <path class="r-tk" d="M450,34 V48" marker-end="url(#a2)"/><path class="r-tk" d="M570,34 V48" marker-end="url(#a2)"/>
+        <path class="r-tk" d="M690,34 V48" marker-end="url(#a2)"/>
+        <text class="sm" x="745" y="38" style="fill:var(--csa)">top-k</text>
+        <!-- kv rail below -->
+        <path class="r-kv" d="M90,90 V106 H690"/>
+        <path class="r-kv" d="M210,106 V92" marker-end="url(#a2)"/><path class="r-kv" d="M330,106 V92" marker-end="url(#a2)"/>
+        <path class="r-kv" d="M450,106 V92" marker-end="url(#a2)"/><path class="r-kv" d="M570,106 V92" marker-end="url(#a2)"/>
+        <path class="r-kv" d="M690,106 V92" marker-end="url(#a2)"/>
+        <text class="sm" x="745" y="110" style="fill:var(--csa)">主 KV</text>
+
+        <text class="hd" x="40" y="140">解码器前两组（层 20–27，m = 1）</text>
+        <!-- row B boxes y 170..210 -->
+        <rect class="f-full" x="40" y="170" width="100" height="40" rx="5"/>
+        <text class="t-inv" x="90" y="187" text-anchor="middle">L20</text>
+        <text class="t-inv" x="90" y="202" text-anchor="middle" font-size="11">Full</text>
+        <rect class="f-reuse" x="160" y="170" width="100" height="40" rx="5"/><text x="210" y="187" text-anchor="middle">L21–23</text><text class="sm" x="210" y="202" text-anchor="middle">Reuse</text>
+        <rect class="f-reindex" x="280" y="170" width="100" height="40" rx="5"/><text x="330" y="187" text-anchor="middle">L24</text><text x="330" y="202" text-anchor="middle" font-size="11">Reindex</text>
+        <rect class="f-reuse" x="400" y="170" width="100" height="40" rx="5"/><text x="450" y="187" text-anchor="middle">L25</text><text class="sm" x="450" y="202" text-anchor="middle">Reuse</text>
+        <rect class="f-reuse" x="520" y="170" width="100" height="40" rx="5"/><text x="570" y="187" text-anchor="middle">L26</text><text class="sm" x="570" y="202" text-anchor="middle">Reuse</text>
+        <rect class="f-reuse" x="640" y="170" width="100" height="40" rx="5"/><text x="690" y="187" text-anchor="middle">L27</text><text class="sm" x="690" y="202" text-anchor="middle">Reuse</text>
+        <!-- top-k rails above -->
+        <path class="r-tk" d="M90,170 V155 H210 V168" marker-end="url(#a2)"/>
+        <path class="r-tk" d="M330,170 V155 H690"/>
+        <path class="r-tk" d="M450,155 V168" marker-end="url(#a2)"/><path class="r-tk" d="M570,155 V168" marker-end="url(#a2)"/>
+        <path class="r-tk" d="M690,155 V168" marker-end="url(#a2)"/>
+        <text class="sm" x="745" y="159" style="fill:var(--csa)">top-k</text>
+        <!-- kv rail below -->
+        <path class="r-kv" d="M90,210 V226 H690"/>
+        <path class="r-kv" d="M210,226 V212" marker-end="url(#a2)"/><path class="r-kv" d="M330,226 V212" marker-end="url(#a2)"/>
+        <path class="r-kv" d="M450,226 V212" marker-end="url(#a2)"/><path class="r-kv" d="M570,226 V212" marker-end="url(#a2)"/>
+        <path class="r-kv" d="M690,226 V212" marker-end="url(#a2)"/>
+        <text class="sm" x="745" y="230" style="fill:var(--csa)">主 KV</text>
+        <text class="sm" x="330" y="246" text-anchor="middle">L24 还借用 L20 的 indexer K</text>
+      </svg>
+    </div>
+    <figcaption>上半部分就是上面的例子。实线表示笔记（主 KV）从哪一层来，虚线表示要读的 512 个位置（top-k）由哪一层挑出。编码器分 3 组，组长是第 2、8、14 层；解码器的笔记全部来自第 20 层，第 24、28、32、36 层是 Reindex，其余都是 Reuse。</figcaption>
+  </figure>
+  <h4>打个比方：6 个人的学习小组</h4>
+  <div class="cards">
+    <div class="card">
+      <h5>V4 的做法</h5>
+      <p>6 个人复习一本超厚的教材。每个人各自把整本书做一遍摘要，再各自翻摘要找出 512 页重点。</p>
+      <div class="ex">6 份摘要，6 次查找</div>
+    </div>
+    <div class="card">
+      <h5>V4.1 的做法</h5>
+      <p>组长做摘要，并标出 512 页重点。其余 5 人直接读这 512 页，各自带着自己的问题去读，得到各自的答案。</p>
+      <div class="ex">1 份摘要，1 次查找</div>
+    </div>
+  </div>
+  <ul>
+    <li><b>省了显存</b>：只存 1 份笔记。30 个 Reuse 层都不存笔记，这是全局 KV cache 能小到 890 B/token 的主要原因。</li>
+    <li><b>省了计算</b>：只查找 1 次，indexer 的打分和排序都省掉了。</li>
+    <li><b>代价</b>：如果第 5 个人真正需要的那一页组长没标出来，他就看不到。这就是 Reuse 的近似：默认相邻几层关心的位置差不多。</li>
+  </ul>
+
+  <div class="note">
+    <span class="lbl">补充</span>两点容易漏掉
+    <p><b>最近 128 个 token 每层仍然自己看。</b>这是 SWA 旁支，很便宜，Reuse 层也照样自己算。所以 Reuse 层其实读两样东西：组长那 512 条笔记，加上自己的最近 128 个 token，两者放在同一次 softmax 里。</p>
+    <p><b>解码器稍微复杂一点。</b>它的笔记全部由第 20 层写；但每 4 层会有一层（第 24、28、32、36 层）是 Reindex，用第 20 层的笔记重新挑一次 512 个位置，紧跟其后的 3 层 Reuse 就用这次新挑的结果。</p>
+  </div>
+</section>
+
+<section class="sec" id="k-comp">
+  <div class="sec-no">2.3</div>
+  <h3>压缩变简单了：不重叠、无位置偏置、解码器不压缩</h3>
+  <figure>
+    <div class="cmp" role="img" aria-label="16 个 token 的压缩方式对比：V4 CSA 每个 entry 看 8 个 token，相邻 entry 重叠 4 个；CSA2 编码器每 2 个 token 一个 entry，不重叠；CSA2 解码器每个 token 自成一个 entry。">
+      <div class="nm">token</div>
+      <div class="tg" id="tok16"></div>
+      <div class="nm">V4 CSA<small>m = 4，窗口 8，重叠</small></div>
+      <div class="tg">
+        <b class="mask" style="grid-column:1/5">e0（前半被 mask）</b><b class="v4" style="grid-column:5/13">e2 · token 4–11</b>
+        <b class="v4" style="grid-column:1/9">e1 · token 0–7</b><b class="v4" style="grid-column:9/17">e3 · token 8–15</b>
+      </div>
+      <div class="nm">CSA2 编码器<small>m = 2，不重叠</small></div>
+      <div class="tg" id="m2"></div>
+      <div class="nm">CSA2 解码器<small>m = 1，不压缩</small></div>
+      <div class="tg" id="m1"></div>
+    </div>
+    <figcaption>V4 的 CSA 每个 entry 横跨前一块和当前块，需要 a/b 两套投影和位置偏置 B<sup>a</sup>/B<sup>b</sup>。CSA2 只在每组内部做 softmax 加权，m = 1 时就是“投影 + RMSNorm”，没有任何合并。</figcaption>
+  </figure>
+  <p>代价从哪里补回来？编码器 m=2 比 V4 的 m=4 保留了更多细节；解码器 m=1 等于完全不压缩。由于 40 层里只有 4 层存 KV，即使压缩率更低，总 KV 仍然小得多。论文没有解释为什么选 m=2 和 m=1。</p>
+</section>
+
+<section class="sec" id="k-hier">
+  <div class="sec-no">2.4</div>
+  <h3>分层 indexer：先粗选块，再细选位置</h3>
+  <p class="gist">解码器 m=1，1M 上下文就有 1M 个候选位置。如果 5 个打分层（第 20、24、28、32、36 层）都全扫一遍，indexer 的成本会很高。V4.1 让<b>第 20 层全扫一次并圈出一个候选池</b>，后面的 Reindex 层只在池子里打分。</p>
+  <div class="flow" aria-label="分层 indexer 流程">
+    <span>1,048,576 个位置</span><em>第 20 层 indexer 全扫 →</em>
+    <span class="hot">自己的 top-512</span><em>同时按块取最高分 →</em>
+    <span class="hot">2048 块 × 8 = 16,384 个候选</span><em>第 24/28/32/36 层只扫候选 →</em>
+    <span class="hot">各自的 top-512</span>
+  </div>
+  <p><b>例子</b>：1M 上下文时，每个 Reindex 层的打分量从 1,048,576 降到 16,384，减少到 1/64，而且不再随上下文变长而增长。代价是近似：某个 Reindex 层真正想看的位置，如果不在第 20 层圈出的块里，就会被漏掉。第三部分有可以拖动的例子。这个机制只用在解码器，而且是 post-training 阶段才加入的，训练和推理都受同样的限制。</p>
+</section>
+
+<section class="sec" id="k-fp4">
+  <div class="sec-no">2.5</div>
+  <h3>FP4 主 KV：每个 entry 从 576 B 到 288 B</h3>
+  <p class="gist">V4 的主 KV 是 448 维 FP8 + 64 维 BF16（≈576 B/entry）。V4.1 把 512 维<b>全部</b>存成 FP4，每 16 个通道配一个 E4M3 scale（256 + 32 = 288 B/entry）。RoPE 维度也一样，在 RoPE 之后再量化。SWA KV 仍是 FP8。</p>
+  <figure>
+    <div class="bars" role="img" aria-label="每 token 全局 KV 字节数，按比例画：V4-Flash 3514 字节，其中推算的 CSA 主 KV 3024、CSA indexer 357、HCA 90，另有 43 字节未拆分；V4.1-Flash 890 字节，其中编码器主 KV 432、编码器 indexer 102、解码器主 KV 加 indexer 356。">
+      <div class="nm">V4-Flash</div>
+      <div class="stack"><span class="s-a" style="width:86.1%">CSA 主 KV 3024</span><span class="s-c" style="width:10.2%">idx</span><span class="s-h" style="width:2.6%"></span><span class="s-x" style="width:1.2%"></span></div>
+      <div class="v">3,514 B</div>
+      <div class="nm">V4.1-Flash</div>
+      <div class="stack"><span class="s-a" style="width:12.3%">432</span><span class="s-c" style="width:2.9%"></span><span class="s-b" style="width:10.1%">356</span></div>
+      <div class="v">890 B</div>
+    </div>
+    <div class="legend">
+      <span style="--sw:var(--csa)">主 KV（V4：CSA 层；V4.1：编码器）</span>
+      <span style="--sw:var(--csa-soft)">indexer K</span>
+      <span style="--sw:var(--hca-soft)">V4：HCA</span>
+      <span style="--sw:var(--csa-mid)">V4.1：解码器主 KV + indexer K</span>
+      <span style="--sw:var(--rule)">未拆出的 43 B</span>
+    </div>
+    <figcaption>两条按同一比例尺绘制。总数来自论文图 1b；各部分的拆分是我按 config 推算的，拆法见 3.5。V4-Flash 有 43 B 没能拆出来，应该是 FP8 的 scale 等字节。</figcaption>
+  </figure>
+  <p><b>例子</b>：一个 1M token 的会话，全局 KV 约 0.9 GB；V4-Flash 约 3.5 GB。SWA 部分固定为 40 层 × 128 个 token，约 2.7 MB，与上下文长度无关（推算）。</p>
+</section>
+
+<section class="sec" id="k-replay">
+  <div class="sec-no">2.6</div>
+  <h3>SWA Bounded Replay：SWA 不落盘，丢了只补 128 个 token</h3>
+  <p class="gist">全局 KV 只依赖 token 本身，可以存到 SSD，下一轮直接读回。SWA KV 却是每层各算一份、依赖层内隐状态的，要精确恢复，得重算 <code>层数 × 128</code> 个 token。V4.1 的做法是：<b>只重放最后 128 个 token，窗口在重放起点截断</b>。结果是近似的，但便宜得多。为什么精确恢复要重算这么多，3.6 节有逐步图解。</p>
+  <figure>
+    <div class="tline" role="img" aria-label="多轮对话第二轮的 prefill 示意：两者都从缓存读回前缀的全局 KV；V4 的 Zero SWA 策略要重算 5504 个 token，V4.1 只重放 128 个，然后都要处理新增的 2K token。">
+      <div class="nm">V4 · Zero SWA<small>精确恢复</small></div>
+      <div class="seg"><span class="g-cache" style="flex:60">前缀全局 KV（读缓存）</span><span class="g-replay" style="flex:30">重算 43 × 128 = 5504</span><span class="g-new" style="flex:12">新 2K</span></div>
+      <div class="nm">V4.1 · Bounded Replay<small>近似恢复</small></div>
+      <div class="seg"><span class="g-cache" style="flex:87">前缀全局 KV（读缓存）</span><span class="g-replay" style="flex:3">128</span><span class="g-new" style="flex:12">新 2K</span></div>
+    </div>
+    <figcaption>示意图，不按比例。例子：第二轮对话，前缀 80K token 已缓存，新增 2K token 的工具输出。生产中的 V4 其实会在 prompt 末尾和输出末尾各存一份 SWA，论文说 Zero 策略在生产中代价太高。</figcaption>
+  </figure>
+  <ul>
+    <li>HBM：运行中的全局 KV。SSD / host：持久化的全局 KV，至少保留 72 小时。</li>
+    <li>编码器 SWA KV：放在分布式内存池里（每台机器拿 10% 的 host DRAM），TTL 只有几分钟。几分钟内的下一轮可以直接命中，过期就靠 replay 重建。</li>
+    <li>解码器 SWA KV：从不缓存，每次 prefill 都在最后 128 个 token 上重建，这一步正好和 CED 的设计衔接。</li>
+    <li>持久 KV 能降到约 1/8，原因有两个：全局 KV 本身只有约 1/4，而 SWA 又不再落盘。</li>
+  </ul>
+</section>
+
+<section class="sec" id="k-ext">
+  <div class="sec-no">2.7</div>
+  <h3>另外三个扩展：mHC、Engram、DSpark</h3>
+  <div class="cards">
+    <div class="card">
+      <h5>Single-Pass mHC</h5>
+      <p>V4 每层要先读一遍残差流来算混合系数，再读一遍去用它。V4.1 改成用<b>上一层算好的</b>系数，读一遍就够了。</p>
+      <div class="ex">V4   : F_l(A_l · X_l)<br>V4.1 : F_l(A_(l−1) · X_l)<br>访存 (4n+4)d → (2n+2)d，减半</div>
+    </div>
+    <div class="card">
+      <h5>Engram</h5>
+      <p>用前 2–4 个 token 组成 n-gram，哈希后去一张巨大的表里取向量，加回隐状态。196B 参数，只放在第 1 层和第 14 层。</p>
+      <div class="ex">“the cat sat” → 哈希 (cat, sat)、(the, cat, sat)…<br>→ 查表 → 门控 → 加到 h<br>表放在 host 内存，通过 RDMA 预取</div>
+    </div>
+    <div class="card">
+      <h5>DSpark</h5>
+      <p>取代 MTP 的投机解码头。3 个小 Transformer block 读取第 37–39 层的隐状态，一次前向并行草拟 5 个位置，再由主模型验证。</p>
+      <div class="ex">Markov 头：建模相邻草稿之间的依赖<br>置信度头：预测每个位置被接受的概率<br>→ 按请求动态决定验证长度</div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================== PART 3 ====================== -->
+<div class="part-head">
+  <div class="k">第三部分</div>
+  <h2>精讲：对照论文的图，逐个拆开</h2>
+  <p>论文里和推理有关的图有 5 张：图 1b（每 token KV 的代际对比）、图 2（decode 算力随上下文的变化）、图 3（整体架构）、图 4（CSA2 三种模式）、图 5（分层 indexer）。每节先说论文的图画了什么，再给一张更细的图：把论文折叠起来的部分逐层展开，标上每个张量的形状、精度和来源，并把论文只用文字描述的机制也画出来。代码出自官方 <code>inference/model.py</code>，数字出自论文和 <code>inference/config.json</code>。</p>
+</div>
+
+<section class="sec" id="d-arch">
+  <div class="sec-no">3.1</div>
+  <h3>逐层架构：论文图 3 的展开版</h3>
+  <p class="gist">论文图 3 把 40 层折叠成“×5”“×3”“×4”的重复块。下图把<b>每一层单独画成一行</b>，并标出每层的笔记（全局 KV）从哪来、要读的位置（top-k）由谁挑出。</p>
+
+  <h4>论文图 3 画了什么</h4>
+  <ul>
+    <li><b>左边编码器</b>：Embedding → 2 个 SWA 层 → 3 组重复块，每组是 1 个 <code>CSA2(2, Full)</code> 加 5 个 <code>CSA2(2, Reuse)</code>。括号里的两个参数是（压缩率 m，模式）。</li>
+    <li><b>右边解码器</b>：1 个 <code>CSA2(1, Full)</code> 加 3 个 Reuse，然后 4 组重复块，每组是 1 个 Reindex 加 3 个 Reuse。</li>
+    <li><b>连线</b>：编码器顶部的 “Enc. Hidden States” 连到解码器的 Full 层（标注 CED）；Full 层旁边引出 Hierarchical Sparse Indexer → Candidate Pool → 各个 Reindex 层。</li>
+    <li><b>其他</b>：每层都带 MoE；底部是 Engram、Text / Vision Embedding 和 Vision Encoder；顶部是 DSpark；残差用 Single-Pass mHC。</li>
+  </ul>
+
+  <figure>
+    <div class="svgwrap tall"><svg id="arch" viewBox="0 0 900 990" role="img" aria-label="V4.1-Flash 逐层架构图：L0、L1 为纯 SWA；编码器 L2、L8、L14 为 Full，分别写 KV1、KV2、KV3，各自后面 5 层 Reuse 读它；解码器 L20 为 Full，写 KV4 并建立候选池，L24、L28、L32、L36 为 Reindex，其余为 Reuse，全部读 KV4。H20 是编码器输出，也是 L20 的输入。Engram 接在 L1 和 L14，DSpark 读取 L37 到 L39。"></svg></div>
+    <div class="legend">
+      <span style="--sw:var(--csa)">Full：写笔记，自己挑位置</span>
+      <span style="--sw:var(--csa-mid)">Reindex：借笔记，在候选池里自己挑</span>
+      <span style="--sw:var(--csa-soft);--sb:var(--csa-mid)">Reuse：笔记和位置都借</span>
+      <span style="--sw:var(--swa-soft);--sb:var(--swa)">纯 SWA</span>
+    </div>
+    <figcaption>比论文图 3 多出的信息：每一层单独一行，标明它读哪一份 KV、用哪一层挑出的 top-k；右侧 4 根竖条就是全模型仅有的 4 份全局 KV，标出了谁写、谁读和每 token 字节数；最右虚线是候选池的流向；最左 4 根细线是 mHC 的 4 条残差流。</figcaption>
+  </figure>
+
+  <h4>怎么读这张图</h4>
+  <ol>
+    <li><b>看颜色</b>：深色 Full 是组长，写笔记、自己挑位置；中间色 Reindex 借 L20 的笔记，但在候选池里自己挑；浅色 Reuse 全部借用；绿色是只有滑动窗口的 SWA 层。</li>
+    <li><b>看右边 4 根竖条</b>：整个模型只有这 4 份全局 KV，竖条跨过的层就是读它的层。每 token 字节数加起来是 178 × 3 + 356 = 890。</li>
+    <li><b>看中间的横虚线</b>：H<sub>20</sub> 是编码器的输出，它既是 L20 的输入，也是 KV④ 的来源。解码器看 prompt 只靠 KV④ 和各层自己的 SWA。</li>
+    <li><b>看最右的虚线</b>：L20 建的候选池只给 L24、L28、L32、L36 这 4 个 Reindex 层用，其他层不打分。</li>
+    <li><b>看两端</b>：Engram 接在 L1 和 L14，表放在 host 内存；DSpark 读取 L37–39 的隐状态来草拟 token。论文说 Engram 放在 L1 和 L14，是为了在训练时平衡各流水线阶段的显存。</li>
+  </ol>
+</section>
+
+<section class="sec" id="d-ced">
+  <div class="sec-no">3.2</div>
+  <h3>CED 的四种推理场景（论文只有公式，这里画出来）</h3>
+  <p class="gist">论文用公式和文字描述 CED 与 Bounded Replay，没有配图。下面按一个请求可能遇到的四种情况，画出<b>哪些层、哪些 token 需要计算</b>。</p>
+<pre>C_l = H_{L/2} · W_l^KV,     Z_l = H_{L/2} · W_l^Z,     l &gt; L/2        <span class="c"># 论文 Eq.(1)，L = 40</span>
+<span class="c"># 解码器的全局 KV 不从本层隐状态 H_l 算，而是从编码器最后一层的输出 H_20 投影</span>
+<span class="c"># SWA 仍然逐层：每层用自己的 H_l 算局部 KV</span></pre>
+  <p><b>和 YOCO 的区别</b>：论文说 YOCO 让上半部分的层直接共享下半部分生成的 KV cache。CED 在此基础上做了两点改进：一是解码器的全局 KV 用逐层的投影权重 W<sub>l</sub> 从 H<sub>20</sub> 算出（在 CSA2 里实际上只由 L20 这个 Full 层算一份，其余层共享）；二是 SWA 保持逐层计算，论文的说法是“增加了局部 KV 生成的计算深度”。</p>
+
+  <figure>
+    <div class="svgwrap"><svg id="ced4" viewBox="0 0 860 440" role="img" aria-label="四种场景的层乘 token 示意。(a) 冷启动：编码器和 L20 计算全部 token，解码器只为 SWA 计算最后 128 个。(b) 前缀命中且 SWA 命中：前缀读缓存，编码器和 L20 只算新增后缀，解码器只算 prompt 最后 128 个。(c) 前缀命中但 SWA 过期：在 (b) 的基础上，编码器和 L20 额外重放前缀末尾 128 个 token，只重建 SWA KV。(d) decode：只有新 token 走完 40 层，其余读缓存。"></svg></div>
+    <div class="legend">
+      <span style="--sw:var(--csa-soft);--sb:var(--csa)">完整计算（全局 KV + SWA KV）</span>
+      <span style="--sw:var(--sunk);--sb:var(--rule)">从缓存读回</span>
+      <span style="--sw:var(--swa)">只为 SWA 重算</span>
+      <span style="--sw:transparent;--sb:var(--muted)">跳过</span>
+    </div>
+    <figcaption>横轴是 token，纵轴是层：上段 L21–39（解码器），中间细条 L20，下段 L0–19（编码器）。为了能看清，128 个 token 的窄条画宽了，不按比例。(b)(c) 假设新增后缀不少于 128 个 token。</figcaption>
+  </figure>
+
+  <div class="tbl"><table>
+    <thead><tr><th>场景</th><th>编码器 + L20</th><th>解码器 L21–39</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>(a) 冷启动</td><td>全部 N 个 token</td><td>只算 prompt 最后 128 个</td><td>prefill 计算量约减半</td></tr>
+      <tr><td>(b) 前缀命中，SWA 命中</td><td>只算新增后缀</td><td>同上</td><td>几分钟内的下一轮对话</td></tr>
+      <tr><td>(c) 前缀命中，SWA 过期</td><td>新增后缀 + 前缀末尾 128 个（只重建 SWA）</td><td>同上</td><td>Encoder Bounded Replay</td></tr>
+      <tr><td>(d) decode</td><td>新 token</td><td>新 token</td><td>每个新 token 走完 40 层</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>为什么解码器只算 128 个 token 就够</h4>
+  <p>decode 的第一步，解码器各层需要 prompt 最后 128 个 token 在本层的 SWA KV。要精确算出来，得从更早的 token 开始逐层往下追：论文的说法是要让 20 个解码器层跑 20 × 128 = 2560 个 token。论文引用的先前工作指出，SWA 实际的有效感受野比理论值小得多，所以 V4.1 只重放最后 128 个，并把窗口截断在重放起点（Decoder SWA Bounded Replay）。结果不是数学上严格相等的，论文说对回答质量的影响可以忽略，还在 post-training 中模拟了同样的重放，让模型提前适应。</p>
+  <div class="note">
+    <span class="lbl">注意</span>近似的一个副作用
+    <p>场景 (c) 中，新增后缀的全局 KV 和 SWA KV 依赖于“缓存从哪个位置命中”：同一段文字在不同命中位置下，算出来的 KV 不完全相同。论文说这几乎不影响回答质量。</p>
+    <p>官方参考代码 <code>model.py</code> 不做跳层，每个 <code>Block</code> 处理每个 token。跳层在生产推理系统里实现，vLLM 的做法是把 CUDA graph 拆成两段（层 0–20 用完整 batch，层 21–39 用裁剪后的 batch），开关 <code>--[no-]swa-bounded-replay</code> 默认打开，带 CUDA graph 时 prefill 耗时下降 30–40%。</p>
+  </div>
+</section>
+
+<section class="sec" id="d-csa2">
+  <div class="sec-no">3.3</div>
+  <h3>CSA2 三种模式：论文图 4 的细化版</h3>
+  <p class="gist">论文图 4 用绿、黄、红三种颜色区分“本层算的”“借自最近 Full 层的”“借自最近挑过 top-k 的层的”。下图同样分三栏，但<b>给每个张量标上形状和精度</b>，并在每栏底部写明这一层要付出的成本。</p>
+
+  <h4>先理解论文说的“三个乘法维度”</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>维度</th><th>怎么省</th><th>已有做法</th></tr></thead>
+    <tbody>
+      <tr><td>每个 entry 的大小</td><td>减少 KV head，或多个 head 共享一个 latent</td><td>GQA、MLA；V4/V4.1 的 shared-KV（1 个 KV head）</td></tr>
+      <tr><td>序列长度</td><td>每 m 个 token 压成 1 个 entry</td><td>V4 的 CSA、HCA；V4.1 的 m=2、m=1</td></tr>
+      <tr><td>层数</td><td>部分层借用别的层的 cache 或 top-k</td><td>IndexCache（复用 top-k）、YOIO（全网只选一次）、HySparse（稀疏层借 dense 层的 KV）</td></tr>
+    </tbody>
+  </table></div>
+  <p>三个维度的节省是相乘的。论文指出：只复用 top-k 省不了 KV 存储；全网共享一份选择会掉性能；现有方法都没有同时覆盖三个维度。CSA2 三个都做，而且把“共享笔记”和“复用 top-k”拆开了。这就是 Reindex 模式存在的原因：笔记共用，但位置可以重新挑。</p>
+
+  <figure>
+    <div class="svgwrap"><svg id="modes" viewBox="0 0 960 510" role="img" aria-label="CSA2 三种模式的数据流。Full：Main Q、SWA KV、Main KV、Indexer K、Indexer Q 都由本层计算，indexer 打分选出 512 个下标，按下标取出 512 个主 KV，与 128 个 SWA KV 和 sink 拼成 641 个候选做 attention。Reindex：Main KV 和 Indexer K 借自最近的 Full 层，Indexer Q 和 top-k 本层计算。Reuse：Main KV 借自最近的 Full 层，top-k 借自最近挑过的层，不运行 indexer。"></svg></div>
+    <div class="legend">
+      <span style="--sw:var(--csa-soft);--sb:var(--csa)">本层计算</span>
+      <span style="--sw:var(--hca-soft);--sb:var(--hca)">借自最近的 Full 层</span>
+      <span style="--sw:var(--rope-soft);--sb:var(--rope)">借自最近挑过 top-k 的层</span>
+      <span style="--sw:var(--surface);--sb:var(--muted)">运算</span>
+    </div>
+    <figcaption>每栏自下而上读。N 是上下文长度，m 是压缩率（编码器 2，解码器 1）。三种模式都自己算 Main Q 和 SWA KV；每个 head 的一次 softmax 里有 128 个 SWA KV、512 个选中的主 KV 和 1 个 sink，共 641 个候选。</figcaption>
+  </figure>
+
+  <h4>代码怎么区分三种模式</h4>
+  <p>代码里没有 Full / Reindex / Reuse 这些名字，靠两个标志位区分。层与层之间通过一个模块级的 <code>shared_attn = SharedAttentionRuntime()</code> 传递数据，它有四个槽位：<code>compress_kv</code>、<code>index_k</code>、<code>topk_idxs</code>、<code>candidates</code>。</p>
+<pre>kv_source_layers     = [2, 8, 14, 20]                     <span class="c"># Full</span>
+index_source_layers  = [2, 8, 14, 20, 24, 28, 32, 36]     <span class="c"># Full + Reindex</span>
+
+self.is_kv_source    = is_backbone and layer_id in args.kv_source_layers
+self.is_index_source = is_backbone and layer_id in args.index_source_layers
+
+shared_attn.compress_kv = self.compress_kv_cache          <span class="c"># KV 源：发布自己的笔记</span>
+if not self.is_index_source:
+    return shared_attn.topk_idxs                          <span class="c"># Reuse：直接拿别人挑好的</span></pre>
+
+  <h4>Compressor：m=1 与 m=2</h4>
+<pre>if ratio == 1:
+    return self.norm(self.wkv(x))                  <span class="c"># 解码器：投影 + RMSNorm，没有合并</span>
+
+kv, score = self.wkv(x), self.wgate(x)             <span class="c"># 编码器：fp32</span>
+kv = (kv * score.softmax(dim=2)).sum(dim=2)        <span class="c"># 每组 m 个 token 内部、逐通道 softmax 加权</span>
+should_compress = (start_pos + 1) % ratio == 0     <span class="c"># decode：凑满一组才提交</span>
+
+<span class="c"># indexer 用完未旋转的 latent 后，才在每组第一个 token 的位置 j·m 上加 RoPE，再量化成 FP4</span>
+apply_rotary_emb(latent[..., -self.rope_head_dim :], freqs)
+fp4_act_quant(latent, 16, True, scale_dtype=torch.float8_e4m3fn)</pre>
+
+  <h4>一次 attention 的候选池</h4>
+<pre>kv, topk_idxs = self._window_kv(x, freqs_cis, start_pos)                      <span class="c"># SWA：128 个</span>
+compress_kv, compress_idxs = self._compress_kv(x, qr, start_pos, kv.size(1))  <span class="c"># 全局：top-512</span>
+kv        = torch.cat([kv, compress_kv], dim=1)
+topk_idxs = torch.cat([topk_idxs, compress_idxs], dim=-1)
+o = sparse_attn(q, kv, self.attn_sink, topk_idxs, self.softmax_scale)       <span class="c"># 一次 softmax，含 sink</span>
+apply_rotary_emb(o[..., -rd:], freqs_cis, True)                               <span class="c"># inverse RoPE</span></pre>
+</section>
+
+<section class="sec" id="d-index">
+  <div class="sec-no">3.4</div>
+  <h3>分层 indexer 与 decode 成本：论文图 5、图 2</h3>
+  <p class="gist">论文图 5 用方格表示位置：L20 在全部位置上打分，按块取最高分圈出候选块（图中的蓝框），后面的 Reindex 层只在这些块里打分。论文图 2 显示 V4.1 的 decode 算力几乎不随上下文增长。<b>这两张图讲的其实是同一件事。</b></p>
+
+  <h4>候选池怎么建（select_candidate_blocks）</h4>
+  <ol>
+    <li>L20 给全部可见位置打分，先选出自己用的 top-512；</li>
+    <li>把位置按 8 个一块切开，每块取块内最高分作为块分（不足一块的用 −inf 补齐）；</li>
+    <li>最新的那一块（可能还没填满）强制入选；</li>
+    <li>取块分最高的 2048 块，共 16,384 个位置，展开成逐位置的掩码，写进 <code>shared_attn.candidates</code>；</li>
+    <li>Reindex 层打分时把池外位置置为 −inf：<code>index_score.masked_fill(~shared_attn.candidates, -torch.inf)</code>，再各自取 top-512。</li>
+  </ol>
+<pre>k = self.k_norm(self.wk(latent))                 <span class="c"># indexer K 从主 KV 的 latent 投影（只有 KV 源层算）</span>
+q = self.wq_b(qr).unflatten(-1, (self.n_local_heads, self.index_head_dim))
+index_score = torch.einsum("bshd,btd-&gt;bsht", q, index_k)
+index_score = (index_score.relu_() * weights.unsqueeze(-1)).sum(dim=2)
+idxs = index_score.topk(topk, dim=-1, sorted=False).indices.sort(dim=-1).values</pre>
+
+  <div class="widget">
+    <p class="w-title">动手：调候选块数，看 Reindex 层会漏掉什么</p>
+    <p class="w-sub">缩小版：40 个位置，每块 4 个（真实是 8 个），Reindex 层取 top-4（真实是 512）。上排是 L20 的打分，下排是 L24 自己的打分。</p>
+    <div class="ctl">
+      <label for="kb">候选块数</label>
+      <input type="range" id="kb" min="1" max="10" step="1" value="3">
+      <output id="kb-out" for="kb">3</output>
+    </div>
+    <div class="hrow">
+      <div class="lab">L20 的 indexer 分数 → 按块最高分选候选块（第 9 块是最新块，强制保留）</div>
+      <div class="hbars" id="h20" aria-hidden="true"></div>
+      <div class="hidx" id="hidx" aria-hidden="true"></div>
+    </div>
+    <div class="hrow">
+      <div class="lab">L24 只在候选池里打分 → 取 top-4（绿 = 选中，红 = 全局最高但不在池里）</div>
+      <div class="hbars" id="h24" aria-hidden="true"></div>
+    </div>
+    <div class="out" id="h-out" aria-live="polite"></div>
+  </div>
+
+  <h4>每一层要打分多少个位置</h4>
+  <p>论文图 5 只画了“L20 → 候选池 → Reindex 层”这一段。下图把 40 层全部列出来，纵轴是 decode 一个 token 时该层 indexer 要打分的位置数（对数刻度），可以切换上下文长度：</p>
+  <figure>
+    <div class="segc" role="group" aria-label="上下文长度">
+      <button type="button" id="ix-8k" data-n="8192" aria-pressed="false">8K</button>
+      <button type="button" id="ix-128k" data-n="131072" aria-pressed="false">128K</button>
+      <button type="button" id="ix-1m" data-n="1048576" aria-pressed="true">1M</button>
+    </div>
+    <div class="svgwrap"><svg id="ixbars" viewBox="0 0 880 290" role="img" aria-label="每层 indexer 打分位置数，对数刻度。只有 L2、L8、L14、L20 四个 Full 层和 L24、L28、L32、L36 四个 Reindex 层打分，其余 32 层为 0。Full 层的打分数随上下文线性增长，Reindex 层在 16,384 封顶。"></svg></div>
+    <div class="legend">
+      <span style="--sw:var(--csa)">Full：扫全部（编码器 N/2，L20 为 N）</span>
+      <span style="--sw:var(--csa-mid)">Reindex：只扫候选池（≤ 16,384）</span>
+      <span style="--sw:var(--rule)">不打分（Reuse、纯 SWA）</span>
+    </div>
+    <div class="out" id="ix-sum" aria-live="polite"></div>
+    <figcaption>每次打分是 32 个 indexer head 各做一次 128 维点积。悬停柱子可看具体数值。V4-Flash 的对照按 21 个 CSA 层 × N/4 个 entry × 64 head 计算（推算）。</figcaption>
+  </figure>
+
+  <h4>为什么 decode 算力几乎不随上下文涨（论文图 2）</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>每生成一个 token 的成本</th><th>随上下文长度 N 怎么变</th></tr></thead>
+    <tbody>
+      <tr><td>MoE 和各种投影</td><td>不变</td></tr>
+      <tr><td>主 attention（每层 641 个候选）</td><td>不变，N 足够长后 top-k 固定为 512</td></tr>
+      <tr><td>SWA</td><td>不变</td></tr>
+      <tr><td>4 个 Reindex 层的 indexer</td><td>N 超过 16,384 后不变</td></tr>
+      <tr class="hl"><td>4 个 Full 层的 indexer</td><td>随 N 线性增长：3 × N/2 + N</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>粗算（推算）</b>：每打分一个位置，32 个 head 各做一次 128 维点积，约 32 × 256 FLOPs；论文图 2 把 FP4 运算按 0.25 计权。从 4K 到 1M，4 个 Full 层多打分约 266 万个位置，约合 266 万 × 32 × 256 × 0.25 ≈ 5.4 GFLOPs。从论文图 2 读出 V4.1 的曲线大约从 20 涨到 25–26 GFLOPs，与论文说的“上下文扩大 256 倍，decode 算力只增加 1/4”吻合。所以 V4.1 decode 成本里随上下文增长的，几乎只有这 4 个 Full 层的全扫。</p>
+  <p>vLLM 的实测（DeepGEMM 的 sparse MQA logits kernel，GB300）：单个 Reindex 层在 8K 上下文时快 1.2×，512K 时快 14–23×；端到端 prefill 在 512K 时快 1.43×，1M 时快 2×。</p>
+</section>
+
+<section class="sec" id="d-fp4">
+  <div class="sec-no">3.5</div>
+  <h3>FP4 KV 与 890 B：论文图 1b</h3>
+  <p class="gist">论文图 1b 列出四代模型每 token 的全局 KV。下面先按对数刻度画出这组数，再把 890 B <b>拆到每一个字节</b>。</p>
+  <figure>
+    <div class="gen" role="img" aria-label="每 token 全局 KV 字节数，对数刻度：DeepSeek-V1 389,120；V3.2 48,068；V4-Flash 3,514；V4.1-Flash 890。">
+      <div class="g-row"><div class="g-nm">DeepSeek-V1<small>2023.11</small></div><div class="g-track"><span style="width:89.8%" title="DeepSeek-V1：389,120 B/token"></span></div><div class="g-v">389,120</div></div>
+      <div class="g-step">÷ 8.1</div>
+      <div class="g-row"><div class="g-nm">DeepSeek-V3.2<small>2025.12</small></div><div class="g-track"><span style="width:67.0%" title="DeepSeek-V3.2：48,068 B/token"></span></div><div class="g-v">48,068</div></div>
+      <div class="g-step">÷ 13.7</div>
+      <div class="g-row"><div class="g-nm">V4-Flash<small>2026.04</small></div><div class="g-track"><span style="width:38.6%" title="DeepSeek-V4-Flash：3,514 B/token"></span></div><div class="g-v">3,514</div></div>
+      <div class="g-step">÷ 3.9</div>
+      <div class="g-row hl"><div class="g-nm">V4.1-Flash<small>2026.09</small></div><div class="g-track"><span style="width:23.7%" title="DeepSeek-V4.1-Flash：890 B/token"></span></div><div class="g-v">890</div></div>
+      <div class="g-axis"><span style="left:0">100 B</span><span style="left:25%">1 KB</span><span style="left:50%">10 KB</span><span style="left:75%">100 KB</span><span style="left:100%">1 MB</span></div>
+    </div>
+    <figcaption>数值来自论文图 1b，单位是字节 / token。论文用线性刻度，V4.1 的条几乎看不见；这里改用对数刻度，每一格是 10 倍。V4.1 相对 V1 小了 437 倍。</figcaption>
+  </figure>
+
+  <h4>一个 entry 的位布局（论文只有文字）</h4>
+  <figure>
+    <div class="bars" role="img" aria-label="每个主 KV entry 的字节数，按比例画：V4 为 576 字节，其中 448 字节 FP8 NoPE、128 字节 BF16 RoPE；V4.1 为 288 字节，其中 256 字节 E2M1 数据、32 字节 E4M3 scale。">
+      <div class="nm">V4 · 每 entry</div>
+      <div class="stack"><span class="s-c" style="width:77.8%">448 维 FP8（NoPE）448 B</span><span class="s-r" style="width:22.2%">64 维 BF16 128 B</span></div>
+      <div class="v">576 B</div>
+      <div class="nm">V4.1 · 每 entry</div>
+      <div class="stack" style="width:50%"><span class="s-a" style="width:88.9%">512 维 E2M1 256 B</span><span class="s-b" style="width:11.1%">32</span></div>
+      <div class="v">288 B</div>
+    </div>
+    <div class="nibwrap">
+      <div class="nib-title">放大一组：16 个通道共用 1 个 scale</div>
+      <div class="nib" aria-hidden="true" id="nib"></div>
+      <div class="nib-note">16 × 4 bit + 8 bit = 9 B，512 个通道 = 32 组 → 32 × 9 = 288 B</div>
+      <div class="bits" aria-label="E2M1 的 4 个比特：1 位符号，2 位指数，1 位尾数">
+        <span class="b-s">S</span><span class="b-e">E</span><span class="b-e">E</span><span class="b-m">M</span>
+        <em>E2M1 只能表示 ±{0, 0.5, 1, 1.5, 2, 3, 4, 6}；真实值 = 元素 × 本组 scale（E4M3，最大 448）</em>
+      </div>
+    </div>
+    <figcaption>上两条按同一比例尺：V4.1 每个 entry 正好是 V4 的一半。V4 的 576 B 未计入 FP8 自带的 scale 字节。</figcaption>
+  </figure>
+  <ul>
+    <li><b>没有第二级全局 scale</b>：E4M3 最大 448，E2M1 最大 6，可表示到 448 × 6 = 2688。论文的论证是：训练出的 RMSNorm 权重最大约为 1，归一化后 512 维 latent 的长度最多约 √512；RoPE 是旋转，不改变长度，所以任何一个通道的绝对值都不超过 √512 ≈ 22.6，训练中实测最大约 10，远低于上限。</li>
+    <li><b>RoPE 之后再量化</b>：NoPE 和 RoPE 维度用同一格式。论文试过 RoPE 之前量化，精度只略好一点，却会给 decode 增加额外开销。</li>
+    <li><b>SWA KV 仍是 FP8</b>：它对量化更敏感。</li>
+    <li><b>主 KV 的 FP4 只省存储，不省计算</b>：attention 之前先反量化，所以可以选精度更高的 NVFP4 式格式，不要求硬件支持 FP4 矩阵乘。indexer 的 Q/K 则用 OCP 标准的 MXFP4，这是为了兼容尽可能多的硬件平台，因为 indexer 要直接用 FP4 做矩阵乘。</li>
+    <li>QAT 在 post-training 阶段引入。相比 V4 的 FP8 主 KV，存储在 HBM 和 SSD 上都接近减半。</li>
+  </ul>
+
+  <h4>890 B 怎么来（推算，与论文数字完全吻合）</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>组成</th><th class="n">每 entry</th><th class="n">层数</th><th class="n">m</th><th class="n">每 token</th></tr></thead>
+    <tbody>
+      <tr><td>编码器主 KV：512 × 0.5 B + 32 个 scale</td><td class="n">288 B</td><td class="n">3</td><td class="n">2</td><td class="n">432 B</td></tr>
+      <tr><td>编码器 indexer K：128 × 0.5 B + 4 个 scale</td><td class="n">68 B</td><td class="n">3</td><td class="n">2</td><td class="n">102 B</td></tr>
+      <tr><td>解码器主 KV + indexer K</td><td class="n">356 B</td><td class="n">1</td><td class="n">1</td><td class="n">356 B</td></tr>
+      <tr class="hl"><td>合计</td><td></td><td></td><td></td><td class="n">890 B</td></tr>
+    </tbody>
+  </table></div>
+  <p>按同样方法拆 V4-Flash：21 个 CSA 层 × (576 + 68) / 4 ≈ 3381 B，加上 20 个 HCA 层 × 576 / 128 ≈ 90 B，合计 3471 B。论文给的是 3514 B，差的 43 B 应该是 FP8 自带的 scale 等我没计入的字节。</p>
+  <div class="note">
+    <span class="lbl">注意</span>参考代码里的量化是“假量化”。
+    <p><code>model.py</code> 的缓存 buffer 仍按默认 dtype 分配，量化只是原地改写数值。数值行为和真实部署一致，但显存并不会变小。真正的 FP4 存储格式在 FlashMLA 里实现。</p>
+  </div>
+</section>
+
+<section class="sec" id="d-replay">
+  <div class="sec-no">3.6</div>
+  <h3>SWA 的依赖链与 Bounded Replay</h3>
+  <p class="gist">这一节回答两个问题：<b>SWA 缓存丢了以后，为什么要重算那么多 token？</b> V4.1 的 Bounded Replay 又是怎么把这个代价压下来的？为了画得清楚，示意图里把窗口从 128 缩成 4。</p>
+
+  <h4>第一步：每一层都有自己的“最近 128 条笔记”</h4>
+  <p>SWA 的意思是：每个 token 只看最近的 128 个 token，含它自己。为此<b>每一层</b>都维护一个环形缓冲，里面放着最近 128 个 token 在<b>这一层</b>的 KV，下面叫“笔记”。L0 有 L0 的笔记，L1 有 L1 的笔记，互不相通。</p>
+  <p>关键在于笔记是怎么来的。token s 在第 l 层的笔记，是用 token s <b>进入第 l 层时的隐状态</b>投影出来的（3.3 节代码里的 <code>kv_norm(wkv(x))</code>）。而 token s 进入第 l 层时的隐状态，就是它<b>从第 l−1 层出来时的输出</b>。</p>
+  <p>所以：想要第 l 层的笔记，得先有第 l−1 层的输出；而第 l−1 层要算出输出，又得先在第 l−1 层做一次 attention，去看第 l−1 层的笔记。依赖就这样一层一层往下传。</p>
+
+  <h4>第二步：只看两层，L1 就要用到 L0 的 7 个 token</h4>
+  <p>窗口取 4，算 token 12 在 L1 的 attention。图中箭头的意思是“需要”，从上往下读：</p>
+  <figure>
+    <div class="svgwrap"><svg viewBox="0 0 760 335" role="img" aria-label="窗口为 4 时的依赖链：token 12 在 L1 做 attention，需要 L1 里 token 9 到 12 的 4 条笔记；这 4 条笔记由 token 9 到 12 在 L0 的输出投影而来；这 4 个 L0 输出各自需要 L0 里一个 4 个 token 的窗口，分别是 6 到 9、7 到 10、8 到 11、9 到 12；合起来 L0 需要 token 6 到 12 共 7 个 token 的笔记。">
+      <defs><marker id="aC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <!-- row labels -->
+      <text class="sm2" x="12" y="38">① 目标</text>
+      <text class="sm" x="12" y="52">L1 · token 12</text>
+      <text class="sm2" x="12" y="102">② L1 的 4 条笔记</text>
+      <text class="sm2" x="12" y="168">③ L0 的 4 个输出</text>
+      <text class="sm" x="12" y="182">= 它们进入 L1 的输入</text>
+      <text class="sm2" x="12" y="220">④ 每个输出</text>
+      <text class="sm" x="12" y="234">要看的 L0 窗口</text>
+      <text class="sm2" x="12" y="280">⑤ L0 的笔记</text>
+      <!-- ① target -->
+      <rect class="f-full" x="604" y="20" width="56" height="28" rx="3"/>
+      <text class="sm2 t-inv" x="632" y="38" text-anchor="middle">L1 @12</text>
+      <!-- ① -> ② -->
+      <line class="ln" x1="632" y1="48" x2="416" y2="82" marker-end="url(#aC)"/>
+      <line class="ln" x1="632" y1="48" x2="488" y2="82" marker-end="url(#aC)"/>
+      <line class="ln" x1="632" y1="48" x2="560" y2="82" marker-end="url(#aC)"/>
+      <line class="ln" x1="632" y1="48" x2="632" y2="82" marker-end="url(#aC)"/>
+      <text class="sm" x="668" y="70">看 4 条笔记</text>
+      <!-- ② L1 KV -->
+      <rect class="n-new" x="388" y="84" width="56" height="28" rx="3"/><text class="sm2" x="416" y="102" text-anchor="middle">KV 9</text>
+      <rect class="n-new" x="460" y="84" width="56" height="28" rx="3"/><text class="sm2" x="488" y="102" text-anchor="middle">KV 10</text>
+      <rect class="n-new" x="532" y="84" width="56" height="28" rx="3"/><text class="sm2" x="560" y="102" text-anchor="middle">KV 11</text>
+      <rect class="n-new" x="604" y="84" width="56" height="28" rx="3"/><text class="sm2" x="632" y="102" text-anchor="middle">KV 12</text>
+      <!-- ② -> ③ -->
+      <line class="ln" x1="416" y1="112" x2="416" y2="148" marker-end="url(#aC)"/>
+      <line class="ln" x1="488" y1="112" x2="488" y2="148" marker-end="url(#aC)"/>
+      <line class="ln" x1="560" y1="112" x2="560" y2="148" marker-end="url(#aC)"/>
+      <line class="ln" x1="632" y1="112" x2="632" y2="148" marker-end="url(#aC)"/>
+      <text class="sm" x="668" y="134">投影（wkv）</text>
+      <!-- ③ L0 outputs -->
+      <rect class="f-op" x="388" y="150" width="56" height="28" rx="3"/><text class="sm2" x="416" y="168" text-anchor="middle">h 9</text>
+      <rect class="f-op" x="460" y="150" width="56" height="28" rx="3"/><text class="sm2" x="488" y="168" text-anchor="middle">h 10</text>
+      <rect class="f-op" x="532" y="150" width="56" height="28" rx="3"/><text class="sm2" x="560" y="168" text-anchor="middle">h 11</text>
+      <rect class="f-op" x="604" y="150" width="56" height="28" rx="3"/><text class="sm2" x="632" y="168" text-anchor="middle">h 12</text>
+      <!-- ③ -> ④ windows -->
+      <line class="ln" x1="416" y1="178" x2="416" y2="196"/>
+      <line class="ln" x1="488" y1="178" x2="488" y2="208"/>
+      <line class="ln" x1="560" y1="178" x2="560" y2="220"/>
+      <line class="ln" x1="632" y1="178" x2="632" y2="232"/>
+      <rect class="bar-w" x="172" y="196" width="272" height="8" rx="2"/><text class="sm" x="166" y="204" text-anchor="end">@9</text>
+      <rect class="bar-w" x="244" y="208" width="272" height="8" rx="2"/><text class="sm" x="238" y="216" text-anchor="end">@10</text>
+      <rect class="bar-w" x="316" y="220" width="272" height="8" rx="2"/><text class="sm" x="310" y="228" text-anchor="end">@11</text>
+      <rect class="bar-w" x="388" y="232" width="272" height="8" rx="2"/><text class="sm" x="382" y="240" text-anchor="end">@12</text>
+      <text class="sm" x="668" y="222">每个输出都要</text>
+      <text class="sm" x="668" y="236">在 L0 看 4 个</text>
+      <!-- ⑤ L0 KV -->
+      <rect class="n-new" x="172" y="262" width="56" height="28" rx="3"/><text class="sm2" x="200" y="280" text-anchor="middle">KV 6</text>
+      <rect class="n-new" x="244" y="262" width="56" height="28" rx="3"/><text class="sm2" x="272" y="280" text-anchor="middle">KV 7</text>
+      <rect class="n-new" x="316" y="262" width="56" height="28" rx="3"/><text class="sm2" x="344" y="280" text-anchor="middle">KV 8</text>
+      <rect class="n-new" x="388" y="262" width="56" height="28" rx="3"/><text class="sm2" x="416" y="280" text-anchor="middle">KV 9</text>
+      <rect class="n-new" x="460" y="262" width="56" height="28" rx="3"/><text class="sm2" x="488" y="280" text-anchor="middle">KV 10</text>
+      <rect class="n-new" x="532" y="262" width="56" height="28" rx="3"/><text class="sm2" x="560" y="280" text-anchor="middle">KV 11</text>
+      <rect class="n-new" x="604" y="262" width="56" height="28" rx="3"/><text class="sm2" x="632" y="280" text-anchor="middle">KV 12</text>
+      <line class="ln" x1="172" y1="302" x2="660" y2="302"/>
+      <line class="ln" x1="172" y1="296" x2="172" y2="308"/><line class="ln" x1="660" y1="296" x2="660" y2="308"/>
+      <text class="sm2" x="416" y="324" text-anchor="middle">合起来，L0 要 token 6–12 共 7 个 token 的笔记 = 2 × 4 − 1</text>
+    </svg></div>
+    <figcaption>窗口取 4 的缩小版。②是 L1 的笔记，③是 L0 的输出（也就是进入 L1 的隐状态），⑤是 L0 的笔记。④里的每根横条，是③中某个输出在 L0 做 attention 时要看的窗口。</figcaption>
+  </figure>
+  <ol>
+    <li>token 12 在 L1 做 attention，要看 L1 里 token 9、10、11、12 的笔记（窗口 4，含自己）。</li>
+    <li>这 4 条笔记，分别由 token 9–12 进入 L1 时的隐状态投影而来。</li>
+    <li>token 9–12 进入 L1 时的隐状态，就是它们在 L0 的输出。要得到这 4 个输出，L0 必须给 token 9、10、11、12 各做一次 attention。</li>
+    <li>L0 里，token 9 要看 6–9，token 10 要看 7–10，token 11 要看 8–11，token 12 要看 9–12。</li>
+    <li>合起来，L0 需要 token 6 到 12 的笔记，一共 7 个 token。</li>
+  </ol>
+  <p>只叠了两层，需要的 token 就从 4 个变成了 7 个（2 × 4 − 1）。换成真实窗口 128，就是 2 × 128 − 1 = <b>255 个</b>。这就是你问的情况：L1 的 SWA 要 128 个历史 KV，这 128 个 KV 要 L0 输出 128 个 hidden，而这 128 个 hidden 又要 L0 看 255 个 token。</p>
+
+  <h4>第三步：层数越多，往回追得越远</h4>
+  <p>每往下多走一层，最左边就要再往前推“窗口 − 1”个 token。叠了 n 层 SWA，最底层需要的 token 数是 <code>128 + (n − 1) × 127</code>，约等于 <code>n × 128</code>：</p>
+  <div class="tbl"><table>
+    <thead><tr><th>叠了几层 SWA</th><th class="n">最底层需要的 token</th><th>对应什么</th></tr></thead>
+    <tbody>
+      <tr><td>1 层</td><td class="n">128</td><td>只有 L0：就是窗口本身</td></tr>
+      <tr><td>2 层</td><td class="n">255</td><td>你问的 L1</td></tr>
+      <tr><td>3 层</td><td class="n">382</td><td></td></tr>
+      <tr><td>20 层</td><td class="n">2,541</td><td>V4.1 的解码器（论文的写法是 L/2 × n<sub>win</sub> = 2,560）</td></tr>
+      <tr><td>40 层</td><td class="n">5,081</td><td>V4.1 全部 40 层，约 40 × 128</td></tr>
+      <tr><td>43 层</td><td class="n">5,462</td><td>V4-Flash，V4 报告里 Zero SWA 的说法是 43 × 128 = 5,504</td></tr>
+    </tbody>
+  </table></div>
+  <p>论文里说的“精确恢复 SWA 需要重放 L × n<sub>win</sub> 个 token”，指的就是表里最后几行。</p>
+
+  <h4>动手：在网格上看依赖</h4>
+  <div class="widget">
+    <p class="w-title">依赖网格：6 层 × 32 个 token，窗口 4</p>
+    <p class="w-sub">每一格代表“某一层处理某个 token”，也就是这个 token 在这一层的隐状态和笔记。依次点四个按钮，看哪些格子需要计算。</p>
+    <div class="segc" role="group" aria-label="情况">
+      <button type="button" id="dep-one" data-dep="one" aria-pressed="true">① 一个 token 的依赖</button>
+      <button type="button" id="dep-decode" data-dep="decode" aria-pressed="false">② 正常 decode</button>
+      <button type="button" id="dep-exact" data-dep="exact" aria-pressed="false">③ 精确补满 SWA</button>
+      <button type="button" id="dep-bounded" data-dep="bounded" aria-pressed="false">④ Bounded Replay</button>
+    </div>
+    <div class="ctl" id="dep-ctl">
+      <label for="dep-k">目标层</label>
+      <input type="range" id="dep-k" min="0" max="5" step="1" value="1">
+      <output id="dep-k-out" for="dep-k">L1</output>
+    </div>
+    <div class="dgrid" id="dgrid" aria-hidden="true"></div>
+    <div class="legend" id="dep-legend"></div>
+    <div class="out" id="dep-out" aria-live="polite"></div>
+  </div>
+
+  <h4>平时为什么不用付这个代价</h4>
+  <p>正常运行时，每个 token 都按顺序经过每一层。它在某层的笔记一算出来，就写进这一层的环形缓冲，一直留到被新 token 挤出窗口。到了 decode，每层的缓冲里已经存着前面 127 个 token 的笔记，新 token 在每层只需算自己这 1 条（网格的情况②）。</p>
+  <p>换句话说，依赖链要求的那些计算，在这些 token 当初经过各层时就已经做过了。<b>只有缓存丢了、又要接着往下算的时候，才需要把它补回来。</b></p>
+
+  <h4>什么时候缓存会丢</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>情况</th><th>缺的是什么</th><th>精确恢复要重算</th><th>V4.1 的做法</th></tr></thead>
+    <tbody>
+      <tr><td>编码器：前缀命中，但 SWA 已过期</td><td>编码器各层环形缓冲里的笔记。全局 KV 还在，可以从缓存读回</td><td>阶梯形（网格③）：最底层要从前缀末尾往前约“层数 × 128”个 token 开始</td><td>每层只重放前缀最后 128 个</td></tr>
+      <tr><td>解码器：每次 prefill</td><td>CED 下解码器层不处理 prompt 前面的 token，缓冲本来就是空的</td><td>20 层 × 128 ≈ 2,560 个 token</td><td>每层只跑 prompt 最后 128 个</td></tr>
+      <tr><td>对照：V4 的 Zero SWA</td><td>全部 43 层的缓冲</td><td>43 × 128 = 5,504 个 token</td><td>代价太高，V4 生产中改为在两个时间点存 SWA</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Bounded Replay：只重算最后 128 个 token</h4>
+  <p>SWA 缓存丢了，就只把最后 128 个 token 重跑一遍，而且它们<b>只互相看，不再往前追</b>。下图用 2 层、窗口 4，重建 L1 里 token 12–15 的笔记：</p>
+  <figure>
+    <div class="svgwrap"><svg viewBox="0 0 760 435" role="img" aria-label="窗口为 4、两层时重建 L1 里 token 12 到 15 的笔记。精确恢复：L0 要重算 token 9 到 15，L1 重算 12 到 15。Bounded Replay：两层都只重算 12 到 15；h12 到 h14 的窗口被截掉了 9 到 11，所以它们和由它们投影出的 L1 笔记 KV12 到 KV14 是近似的，h15 和 KV15 仍然精确。">
+<defs><marker id="aR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+<text class="ttl" x="12" y="16">精确恢复</text>
+<text class="sm" x="100" y="16">L0 要重算 token 9–15（7 个），L1 重算 12–15</text>
+<text class="sm2" x="12" y="47">L1 笔记</text>
+<text class="sm2" x="12" y="101">L0 输出</text>
+<text class="sm2" x="12" y="142">L0 窗口</text>
+<text class="sm2" x="12" y="185">L0 笔记</text>
+<rect class="n-new" x="360" y="30" width="60" height="26" rx="3"/><text class="sm2" x="390" y="47" text-anchor="middle">KV12</text>
+<line class="ln" x1="390" y1="84" x2="390" y2="58" marker-end="url(#aR)"/>
+<rect class="n-new" x="360" y="84" width="60" height="26" rx="3"/><text class="sm2" x="390" y="101" text-anchor="middle">h12</text>
+<line class="ln" x1="390" y1="110" x2="390" y2="120"/>
+<rect class="bar-w" x="120" y="120" width="300" height="6"/>
+<rect class="n-new" x="440" y="30" width="60" height="26" rx="3"/><text class="sm2" x="470" y="47" text-anchor="middle">KV13</text>
+<line class="ln" x1="470" y1="84" x2="470" y2="58" marker-end="url(#aR)"/>
+<rect class="n-new" x="440" y="84" width="60" height="26" rx="3"/><text class="sm2" x="470" y="101" text-anchor="middle">h13</text>
+<line class="ln" x1="470" y1="110" x2="470" y2="130"/>
+<rect class="bar-w" x="200" y="130" width="300" height="6"/>
+<rect class="n-new" x="520" y="30" width="60" height="26" rx="3"/><text class="sm2" x="550" y="47" text-anchor="middle">KV14</text>
+<line class="ln" x1="550" y1="84" x2="550" y2="58" marker-end="url(#aR)"/>
+<rect class="n-new" x="520" y="84" width="60" height="26" rx="3"/><text class="sm2" x="550" y="101" text-anchor="middle">h14</text>
+<line class="ln" x1="550" y1="110" x2="550" y2="140"/>
+<rect class="bar-w" x="280" y="140" width="300" height="6"/>
+<rect class="n-new" x="600" y="30" width="60" height="26" rx="3"/><text class="sm2" x="630" y="47" text-anchor="middle">KV15</text>
+<line class="ln" x1="630" y1="84" x2="630" y2="58" marker-end="url(#aR)"/>
+<rect class="n-new" x="600" y="84" width="60" height="26" rx="3"/><text class="sm2" x="630" y="101" text-anchor="middle">h15</text>
+<line class="ln" x1="630" y1="110" x2="630" y2="150"/>
+<rect class="bar-w" x="360" y="150" width="300" height="6"/>
+<rect class="n-new" x="120" y="168" width="60" height="26" rx="3"/><text class="sm2" x="150" y="185" text-anchor="middle">KV9</text>
+<rect class="n-new" x="200" y="168" width="60" height="26" rx="3"/><text class="sm2" x="230" y="185" text-anchor="middle">KV10</text>
+<rect class="n-new" x="280" y="168" width="60" height="26" rx="3"/><text class="sm2" x="310" y="185" text-anchor="middle">KV11</text>
+<rect class="n-new" x="360" y="168" width="60" height="26" rx="3"/><text class="sm2" x="390" y="185" text-anchor="middle">KV12</text>
+<rect class="n-new" x="440" y="168" width="60" height="26" rx="3"/><text class="sm2" x="470" y="185" text-anchor="middle">KV13</text>
+<rect class="n-new" x="520" y="168" width="60" height="26" rx="3"/><text class="sm2" x="550" y="185" text-anchor="middle">KV14</text>
+<rect class="n-new" x="600" y="168" width="60" height="26" rx="3"/><text class="sm2" x="630" y="185" text-anchor="middle">KV15</text>
+<text class="sm" x="676" y="75">投影</text>
+<line class="grid" x1="12" y1="212" x2="748" y2="212"/>
+<text class="ttl" x="12" y="244">Bounded Replay</text>
+<text class="sm" x="150" y="244">两层都只重算 token 12–15，9–11 不再看</text>
+<text class="sm2" x="12" y="275">L1 笔记</text>
+<text class="sm2" x="12" y="329">L0 输出</text>
+<text class="sm2" x="12" y="370">L0 窗口</text>
+<text class="sm2" x="12" y="413">L0 笔记</text>
+<rect class="n-apx" x="360" y="258" width="60" height="26" rx="3"/><text class="sm2" x="390" y="275" text-anchor="middle">KV12 ≈</text>
+<line class="ln" x1="390" y1="312" x2="390" y2="286" marker-end="url(#aR)"/>
+<rect class="n-apx" x="360" y="312" width="60" height="26" rx="3"/><text class="sm2" x="390" y="329" text-anchor="middle">h12 ≈</text>
+<line class="ln" x1="390" y1="338" x2="390" y2="348"/>
+<rect class="bar-cut" x="120" y="348" width="230" height="6"/>
+<rect class="bar-w" x="350" y="348" width="70" height="6"/>
+<rect class="n-apx" x="440" y="258" width="60" height="26" rx="3"/><text class="sm2" x="470" y="275" text-anchor="middle">KV13 ≈</text>
+<line class="ln" x1="470" y1="312" x2="470" y2="286" marker-end="url(#aR)"/>
+<rect class="n-apx" x="440" y="312" width="60" height="26" rx="3"/><text class="sm2" x="470" y="329" text-anchor="middle">h13 ≈</text>
+<line class="ln" x1="470" y1="338" x2="470" y2="358"/>
+<rect class="bar-cut" x="200" y="358" width="150" height="6"/>
+<rect class="bar-w" x="350" y="358" width="150" height="6"/>
+<rect class="n-apx" x="520" y="258" width="60" height="26" rx="3"/><text class="sm2" x="550" y="275" text-anchor="middle">KV14 ≈</text>
+<line class="ln" x1="550" y1="312" x2="550" y2="286" marker-end="url(#aR)"/>
+<rect class="n-apx" x="520" y="312" width="60" height="26" rx="3"/><text class="sm2" x="550" y="329" text-anchor="middle">h14 ≈</text>
+<line class="ln" x1="550" y1="338" x2="550" y2="368"/>
+<rect class="bar-cut" x="280" y="368" width="70" height="6"/>
+<rect class="bar-w" x="350" y="368" width="230" height="6"/>
+<rect class="n-new" x="600" y="258" width="60" height="26" rx="3"/><text class="sm2" x="630" y="275" text-anchor="middle">KV15</text>
+<line class="ln" x1="630" y1="312" x2="630" y2="286" marker-end="url(#aR)"/>
+<rect class="n-new" x="600" y="312" width="60" height="26" rx="3"/><text class="sm2" x="630" y="329" text-anchor="middle">h15</text>
+<line class="ln" x1="630" y1="338" x2="630" y2="378"/>
+<rect class="bar-w" x="360" y="378" width="300" height="6"/>
+<rect class="f-skip" x="120" y="396" width="60" height="26" rx="3"/><text class="sm" x="150" y="413" text-anchor="middle">KV9</text>
+<rect class="f-skip" x="200" y="396" width="60" height="26" rx="3"/><text class="sm" x="230" y="413" text-anchor="middle">KV10</text>
+<rect class="f-skip" x="280" y="396" width="60" height="26" rx="3"/><text class="sm" x="310" y="413" text-anchor="middle">KV11</text>
+<rect class="n-new" x="360" y="396" width="60" height="26" rx="3"/><text class="sm2" x="390" y="413" text-anchor="middle">KV12</text>
+<rect class="n-new" x="440" y="396" width="60" height="26" rx="3"/><text class="sm2" x="470" y="413" text-anchor="middle">KV13</text>
+<rect class="n-new" x="520" y="396" width="60" height="26" rx="3"/><text class="sm2" x="550" y="413" text-anchor="middle">KV14</text>
+<rect class="n-new" x="600" y="396" width="60" height="26" rx="3"/><text class="sm2" x="630" y="413" text-anchor="middle">KV15</text>
+</svg></div>
+    <div class="legend">
+      <span style="--sw:var(--csa-soft);--sb:var(--csa)">要重算</span>
+      <span style="--sw:var(--csa-mid)">L0 窗口：要看的 4 个 token</span>
+      <span style="--sw:transparent;--sb:var(--rope)">窗口被截掉的部分</span>
+      <span style="--sw:var(--rope-soft);--sb:var(--rope)">≈ 近似</span>
+      <span style="--sw:transparent;--sb:var(--muted)">不算</span>
+    </div>
+  </figure>
+  <ul>
+    <li><b>省</b>：每层只算 128 个 token。40 层合计 5,120 个“层 × token”，精确恢复约 10.4 万（推算）。</li>
+    <li><b>不准在哪</b>：h12–h14 少看了前面几个 token，由它们投影出的 L1 笔记也只是近似，更高的层会继续受影响。</li>
+    <li><b>为什么影响小</b>：截掉的是窗口里最远的 token，本来分到的注意力就少；长距离信息走全局 KV，它是从缓存精确读回的。论文实验显示对质量的影响可以忽略。</li>
+  </ul>
+  <h4>h12–h14 具体看哪些 KV、怎么算</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>L0 的 query</th><th>精确时看</th><th>Bounded Replay 看</th></tr></thead>
+    <tbody>
+      <tr><td>h12</td><td>KV9–12 + sink</td><td class="gone">KV12 + sink</td></tr>
+      <tr><td>h13</td><td>KV10–13 + sink</td><td class="gone">KV12–13 + sink</td></tr>
+      <tr><td>h14</td><td>KV11–14 + sink</td><td class="gone">KV12–14 + sink</td></tr>
+      <tr><td>h15</td><td>KV12–15 + sink</td><td>KV12–15 + sink（相同）</td></tr>
+    </tbody>
+  </table></div>
+  <p>算法和平时完全一样，只是候选变少了。以 h12 的一个 head 为例：</p>
+<pre>q12     = token 12 的 query（64 个 head，每个 512 维）
+score_j = q12 · KV_j / √512              <span class="c"># j 只取窗口里的 token</span>
+w       = softmax([score_j …, sink])     <span class="c"># 一次 softmax</span>
+o12     = Σ w_j · KV_j                   <span class="c"># KV 同时当 V；sink 没有 V</span>
+h12     = o12 → inverse RoPE → 输出投影 → 残差 → MoE
+
+<span class="c"># 举例：精确时 KV9–12 的分数 = [1.0, 0.5, 2.0, 3.0]，sink = 1.0</span>
+精确      ：w12 = 0.58，KV9–11 共分到 0.34
+Bounded   ：只剩 KV12 和 sink → w12 = 0.88
+<span class="c"># 本该给 KV9–11 的那 34% 被挤给了 KV12 和 sink → o12 变了 → h12 ≈</span></pre>
+  <p><b>sink 是什么</b>：可以理解成“空注意力”，一个没有 V 的候选。分给 sink 的权重，相当于这部分注意力“不看任何 token”，对输出没有贡献。所以上面例子里，被截掉的 KV9–11 那 34% 权重，一部分挤到了 KV12，一部分变成了“不看”。</p>
+  <p>真实情况窗口是 128。L0、L1 只有 SWA；从 L2 开始，每个 query 还会看全局 KV 选出的 512 个 entry，它们从缓存精确读回，不受截断影响。</p>
+  <p>重放起点：编码器在“前缀命中但 SWA 过期”时，s = H − 128；解码器每次 prefill，s = N − 128。</p>
+
+  <h4>存储分层：SWA 不再落盘</h4>
+  <figure>
+    <div class="tbl"><table class="tiers">
+      <thead><tr><th>存储层</th><th>V4</th><th>V4.1</th></tr></thead>
+      <tbody>
+        <tr><td><b>HBM</b><small>运行中</small></td><td>全局 KV + SWA KV</td><td>全局 KV（890 B/token）+ SWA KV</td></tr>
+        <tr><td><b>host DRAM 内存池</b><small>每台机器 10%</small></td><td>—</td><td class="new">编码器 SWA KV，TTL 只有几分钟</td></tr>
+        <tr><td><b>SSD 持久缓存</b><small>LRU</small></td><td>全局 KV + SWA KV（prompt 末尾、输出末尾各存一份）。SWA 约占一半容量；两类 KV 都能保留 72 小时以上</td><td class="new">只有全局 KV，至少保留 72 小时</td></tr>
+        <tr><td><b>不缓存</b></td><td>—</td><td class="new">解码器 SWA KV：每次 prefill 现场重建</td></tr>
+      </tbody>
+    </table></div>
+    <figcaption>论文 3.2.1 节的内容整理成表。V4 的 SWA 只存 128 个 entry，但因为不压缩，在“很多轮、每轮很短”的对话里仍然占很大空间。</figcaption>
+  </figure>
+  <p><b>为什么 SWA 不该落盘</b>：全局 KV 的复用是长尾的，几天后还可能被同一个前缀命中；SWA KV 只在一个活跃会话的几分钟内有用，会话结束或进入下一轮就失效了。把它放进“保留 72 小时”的 SSD 缓存，访问模式和保留策略不匹配。有了 Bounded Replay，SWA 未命中从“灾难性的重算”变成了“便宜的轻微降级”，所以才敢把它从持久缓存里拿掉。</p>
+  <p>最后算账：SWA 不再落盘，持久化体积约减半；全局 KV 本身约是 V4 的 1/4。两者相乘，持久化 KV 约为 V4-Flash 的 <b>1/8</b>。</p>
+</section>
+
+<section class="sec" id="d-mhc">
+  <div class="sec-no">3.7</div>
+  <h3>Single-Pass mHC（论文 2.4.1 节，没有图）</h3>
+  <p class="gist">mHC 把残差流扩成 n = 4 份，每份 d = 5120 维。每个 token 在每层有三个小矩阵：<b>A 把 4 份混成 1 份</b>作为层的输入，<b>C 把层的输出分发回 4 份</b>，<b>B 让 4 份之间互相混合</b>。</p>
+<pre>X_l ∈ R^{n×d},   A_l ∈ R^{1×n},   B_l ∈ R^{n×n},   C_l ∈ R^{n×1}         <span class="c"># 都是逐 token 的系数</span>
+
+V4   : X_{l+1} = B_l X_l + C_l F_l( A_l     X_l ),   (A_l, B_l, C_l) = H(X_l)
+V4.1 : X_{l+1} = B_l X_l + C_l F_l( A_{l−1} X_l ),   (A_l, B_l, C_l) = H(X_l)</pre>
+
+  <h4>V4 为什么要搬两倍的数据</h4>
+  <p>V4 的实现是三个按顺序执行的 kernel，后一个依赖前一个的结果（下表取 n = 4）：</p>
+  <div class="tbl"><table>
+    <thead><tr><th>kernel</th><th>做什么</th><th class="n">读</th></tr></thead>
+    <tbody>
+      <tr><td>① 残差更新</td><td><code>X_l = B_{l−1} X_{l−1} + C_{l−1} Y_{l−1}</code></td><td class="n">(n+1)d = 5d</td></tr>
+      <tr><td>② 预测系数</td><td><code>(A_l, B_l, C_l) = H(X_l)</code>，要对整条 X<sub>l</sub> 做归约</td><td class="n">nd = 4d</td></tr>
+      <tr><td>③ 输入混合</td><td><code>X̂_l = A_l X_l</code></td><td class="n">nd = 4d</td></tr>
+      <tr><td colspan="2">三个 kernel 合计写 (n+1)d = 5d，再加上 F 里 pre-norm 的 2d</td><td class="n">共 (4n+4)d = 20d</td></tr>
+    </tbody>
+  </table></div>
+  <p>①② 可以合并成一遍：残差更新不需要跨 hidden 维度归约，每算出 X<sub>l</sub> 的一小块就能马上累加进系数投影。但 ③ 必须等 A<sub>l</sub> 出来，而 A<sub>l</sub> 要等整条 X<sub>l</sub> 都归约完，所以只能再读一遍 X<sub>l</sub>，最少也要 (3n+2)d。</p>
+  <figure>
+    <div class="bars" role="img" aria-label="每层每 token 的激活访存量，n 取 4：V4 三个 kernel 为 20d；两遍融合为 14d；Single-Pass 加 Mega-mHC 为 10d，等于理论下界。">
+      <div class="nm">V4 · 三个 kernel</div><div class="stack"><span class="s-c" style="width:100%">(4n+4)d</span></div><div class="v">20d</div>
+      <div class="nm">两遍融合</div><div class="stack" style="width:70%"><span class="s-b" style="width:100%">(3n+2)d</span></div><div class="v">14d</div>
+      <div class="nm">Single-Pass</div><div class="stack" style="width:50%"><span class="s-a" style="width:100%">(2n+2)d</span></div><div class="v">10d</div>
+    </div>
+    <figcaption>每层每 token 的激活访存量，按同一比例尺，n = 4。10d 是理论下界：读一次 (n+1)d、写一次 (n+1)d。</figcaption>
+  </figure>
+  <p><b>Single-Pass 的做法</b>：输入混合改用上一个 block 算好的 A<sub>l−1</sub>，不再依赖本层的归约结果。于是 X<sub>l</sub> 的每一块读进来以后，可以同时“用旧系数混合输入”和“累加新系数”。部署用的 Mega-mHC kernel 把残差更新、输入混合、系数预测、pre-norm 和 FP8 转换融成一个 kernel，残差只读一次、写一次，访存减半。论文说这个错位带来的质量损失可以忽略；预训练时仍用多 kernel 实现，因为错位只改变“用哪一层的系数”。</p>
+<pre>attn_pre, attn_post, attn_comb = self.hc_mixes(x, self.hc_attn_fn, self.hc_attn_scale, self.hc_attn_base)
+x = self.hc_pre(x, pre_mix)                        <span class="c"># attention 用的是上一个 FFN 产出的 pre_mix</span>
+x = self.hc_post(x, residual, attn_post, attn_comb)
+x = self.hc_pre(x, attn_pre)                       <span class="c"># FFN 用 attention 这一步算出的 pre</span>
+x = self.hc_post(x, residual, ffn_post, ffn_comb)
+return x, ffn_pre                                  <span class="c"># 交给下一个 block 的 attention</span></pre>
+  <p>参考代码里的错位是按子层（attention / FFN）而不是按整层。第一层用单位混合（<code>make_identity_pre_mix</code>），最后一个 <code>pre_mix</code> 在 norm/head 之前把 4 份流合并。vLLM 的 Mega-mHC 在 GB200 上比 TileLang 路径快 1.14–1.51×。</p>
+</section>
+
+<section class="sec" id="d-engram">
+  <div class="sec-no">3.8</div>
+  <h3>Engram</h3>
+  <p class="gist">一种“条件记忆”：用 n-gram 的哈希去巨大的嵌入表里取向量。论文的说法是把“记忆”和“计算”解耦。关键性质是<b>寻址是确定性的，只依赖输入 token 序列</b>，所以前向开始之前就能知道要取哪些行，表可以放在 host 内存里提前取。</p>
+  <ul>
+    <li>196B 参数平均分给 2 个模块，位于第 1 层和第 14 层。n-gram 阶数 {2, 3, 4}，每阶 8 个哈希 head、共 2048 维；每个 head 一张约 16M 行的表，表长取互不相同的质数；嵌入表和 K/V 投影都是 FP8。</li>
+    <li>沿用原版 Engram 的 tokenizer 压缩、多 head 哈希、上下文门控和多分支融合；去掉了短因果卷积，因为收益抵不上它给推理栈带来的复杂度。</li>
+  </ul>
+  <div class="flow">
+    <span>token id</span><em>归一化（NFKC、去重音、小写、合并空白）→</em>
+    <span>压缩 id（99,092 种）</span><em>× 每层每个回看位置一个奇数乘子 →</em>
+    <span>滚动 XOR</span><em>第 i 步即 (i+1)-gram →</em>
+    <span>mod 质数 + offset</span><em>→</em>
+    <span class="hot">表中的行号</span>
+  </div>
+  <ul>
+    <li>归一化后，“ The”、“the”、“THE” 映射到同一个 id。序列开头或图像 token 处没有足够历史，回看位置被阻断并填 pad。</li>
+    <li>前向时在 block 之前调用：<code>h = layer.engram(h, engram_hashes[:, :, layer.engram.layer_hash_index, :], engram_mask)</code>。</li>
+    <li><b>推理</b>：通过后台 RDMA 从 host 内存预取；第一个模块（L1）的预取和第一个 Transformer block 的计算重叠。取回的 FP8 值和 scale 直接交给后面的 GEMM。RL rollout 时表常驻 GPU，避免 host 内存碎片导致的 OOM。</li>
+    <li><b>vLLM</b>：异步预取与解码器计算重叠；同一台机器上的多个 DP 副本共享一份 host 表；透明大页让 prefill 查表 kernel 最多快 10×。</li>
+  </ul>
+</section>
+
+<section class="sec" id="d-dspark">
+  <div class="sec-no">3.9</div>
+  <h3>DSpark</h3>
+  <ul>
+    <li><b>结构</b>：3 个 Transformer block（config 中 <code>n_mtp_layers = 3</code>，权重在 <code>mtp.*</code> 下），滑窗 128，MoE 为 128 个专家、激活 3 个。</li>
+    <li><b>输入</b>：取主模型 L37、L38、L39 输入处的隐状态（对 4 份 mHC 流取平均）拼起来，经 <code>main_proj / main_norm</code> 投影进 drafter 的窗口 KV。</li>
+    <li><b>半自回归草拟</b>：草稿块由已知 token 后接 noise 占位 token（<code>dspark_noise_token_id = 128799</code>）组成，块内不加因果掩码，一次前向并行算出 5 个位置的基础 logits；Markov 头（rank 256）建模相邻草稿之间的依赖。</li>
+    <li><b>按置信度调度验证</b>：置信度头预测每个位置被接受的条件概率，由此估计“前 k 个草稿全部存活”的概率；调度器再结合实测的引擎吞吐曲线，在当前负载下为每个请求选择验证长度，目标是整个系统的期望吞吐最大。</li>
+    <li><b>训练</b>：V3 的 MTP 是和主干一起预训练的。DSpark 在预训练之后单独训练，主干冻结；post-training 期间继续训练，但梯度不回传到主干。这样它能跟上不断变化的策略，同时加速线上服务和 RL / OPD 的 rollout。</li>
+  </ul>
+  <p>论文正文没有给出接受长度和加速比，vLLM 博客也没有提到 DSpark 的数字。</p>
+</section>
+
+<section class="sec" id="d-moe">
+  <div class="sec-no">3.10</div>
+  <h3>MoE 与多模态</h3>
+  <ul>
+    <li><b>规模</b>：384 个 routed 专家（V4-Flash 256 个），中间维 2304（V4-Flash 2048），1 个共享专家，每 token 激活 6 个，<code>route_scale = 1.5</code>，SwiGLU clamp 阈值 10。</li>
+    <li><b>没有 hash 路由</b>：config 没有 hash 层字段，<code>model.py</code> 里也没有 hash 路由。</li>
+    <li><b>多模态负载均衡</b>：文本和图像 token 各有一套专家 bias（代码里是 <code>bias_vl</code>），各自按自己的负载更新，更新速度 0.001；bias 只决定选哪些专家，不影响加权。另有权重 1e-4 的序列级均衡损失。</li>
+    <li><b>视觉</b>：DeepSeek-ViT 从头训练，32 层、hidden 1024、16 head、patch 14，2D-RoPE，3×3 pixel-unshuffle；两层 MLP 投影（hidden 5120）；每张图最多 1024 个 token。图文从预训练第一天起联合训练。</li>
+    <li><b>权重量化</b>：dense 部分 FP8，block 从 V4 的 128×128 改为 32×32（ue8m0 scale）；专家权重 FP4。</li>
+  </ul>
+</section>
+
+<section class="sec" id="d-deploy">
+  <div class="sec-no">3.11</div>
+  <h3>部署与代码生态</h3>
+  <p>论文的说法是“架构概念上复杂，但推理 kernel 流程很简洁”：靠少数几个融合 kernel 把复杂操作包起来。绝大多数层是 Reuse 模式，prefill 只需 15 个 kernel，decode 只需 11 个。部署上采用 <b>EPD 分离</b>（Encoder–Prefill–Decode）：视觉编码、prefill、decode 可以各自扩缩容、重叠执行。</p>
+  <div class="tbl"><table>
+    <thead><tr><th>仓库 / 组件</th><th>与 V4.1 相关的内容</th></tr></thead>
+    <tbody>
+      <tr><td>FlashMLA</td><td>融合的 RoPE–attention–逆 RoPE–cast kernel；9/10 加入 V4.1 的 prefill/decode kernel（FP8 / FP4 KV）。<b>9/30 发布破坏性更新：不再支持 Hopper，也不再支持 V3 / V3.2 / V4.0，FP8 / FP4 KV 格式也变了</b></td></tr>
+      <tr><td>DeepGEMM</td><td>Mega-Gate、Mega-mHC、Mega-MoE；sparse MQA logits（Reindex 层只对 16K 候选打分）</td></tr>
+      <tr><td>DeepSelect（新）</td><td>面向 DeepSeek 稀疏注意力的 top-k kernel 和采样器</td></tr>
+      <tr><td>TileKernels</td><td>MoE 路由、Engram、量化、mHC 等 TileLang kernel，9/30 加入 Ascend 后端</td></tr>
+      <tr><td>HF <code>inference/</code></td><td>可读的参考实现（MP=8）。不跳层、不支持 chunked prefill、只做假量化</td></tr>
+    </tbody>
+  </table></div>
+  <h4>vLLM 的经验（GB300）</h4>
+  <ul>
+    <li><b>MegaAttention</b>：query RoPE、稀疏注意力、inverse RoPE、FP8 cast 一次 launch，kernel 效率提升 1.45×。</li>
+    <li><b>Mega-Gate</b>：gate GEMM、打分、bias、top-k 融成一个 kernel，中等 batch 下快 1.18–1.31×。</li>
+    <li><b>并行方式</b>：低延迟用 TP4；高吞吐用 DEP2（DP attention + 专家切分），避免在 TP 下重复存放共享的 KV latent，并用会话亲和性保住前缀缓存命中。</li>
+    <li><b>结果</b>：从发布当天到 10 月 2 日，AgentX 基准上低延迟场景快 1.9×，高吞吐场景约 5×。</li>
+  </ul>
+</section>
+
+<section class="sec" id="d-open">
+  <div class="sec-no">附</div>
+  <h3>未确认的问题与来源</h3>
+  <ul class="recap">
+    <li>为什么编码器取 m=2、解码器取 m=1，论文没有给出理由，也没有 Full / Reindex / Reuse 共享方式的消融实验。</li>
+    <li>DSpark 的接受长度和加速比，论文正文和 vLLM 博客都没有给出。</li>
+    <li>Engram 门控的具体公式没有看到：<code>engram.py</code> 里只能看到哈希部分。</li>
+    <li>生产 KV cache manager 如何为“跨层共享 + 两种压缩率”设计 block 布局，论文和 vLLM 博客都没有细节，V4 笔记里 <code>lcm(m, m')</code> 那一套在 V4.1 上怎么变，目前无法确认。</li>
+    <li>本页标“推算”的数字（890 B 的拆分、CED 计算量比例、indexer 打分量、decode FLOPs 粗算、从图 2 读出的数值）是我按 config 和论文公式算的，不是论文原文。</li>
+  </ul>
+  <footer>
+    来源：
+    <a href="https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/DeepSeek_V41_Tech_Report.pdf">技术报告 PDF</a>（<a href="https://arxiv.org/abs/2609.19969">arXiv 2609.19969</a>）·
+    <a href="https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash">HF deepseek-ai/DeepSeek-V4.1-Flash</a>（README、config.json、inference/model.py、inference/engram.py）·
+    <a href="https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash">HF deepseek-ai/DeepSeek-V4-Flash</a> ·
+    <a href="https://vllm.ai/blog/2026-10-07-deepseek-v41-flash">vLLM 博客</a> ·
+    <a href="https://github.com/deepseek-ai/FlashMLA">FlashMLA</a> ·
+    <a href="https://github.com/deepseek-ai/TileKernels">TileKernels</a> ·
+    <a href="https://api-docs.deepseek.com/news/news260910/">DeepSeek 发布公告</a>
+  </footer>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  const $ = (s, r=document) => r.querySelector(s);
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+
+  /* ---------- 1.1 layer map ---------- */
+  const lmap = $('#lmap');
+  const KV = [2, 8, 14, 20], IDX = [2, 8, 14, 20, 24, 28, 32, 36];
+  const v41 = i => i < 2 ? 'swa' : KV.includes(i) ? 'full' : IDX.includes(i) ? 'reindex' : 'reuse';
+  const v4 = i => i < 2 ? 'swa' : (i % 2 === 0 ? 'csa' : 'hca');
+  const NAME = { swa:'纯 SWA', csa:'CSA', hca:'HCA', full:'Full', reindex:'Reindex', reuse:'Reuse' };
+
+  function row(label, sub, n, fn){
+    const r = el('div', 'lrow'); const nm = el('div', 'nm', label); nm.appendChild(el('small', null, sub));
+    const g = el('div', 'lgrid');
+    for (let i = 0; i < n; i++) { const c = el('i', 'c-' + fn(i)); c.title = 'Layer ' + i + '：' + NAME[fn(i)]; g.appendChild(c); }
+    r.append(nm, g); return r;
+  }
+  lmap.appendChild(row('V4-Flash', '43 层', 43, v4));
+  // markers above V4.1
+  const mr = el('div', 'lrow'); mr.appendChild(el('div'));
+  const marks = el('div', 'marks');
+  [[1,'▲'],[14,'▲'],[37,'◆'],[38,'◆'],[39,'◆']].forEach(([i, s]) => { const m = el('span', null, s); m.style.gridColumn = (i + 1) + ' / ' + (i + 2); m.title = (s === '▲' ? 'Engram @ layer ' : 'DSpark 读取 layer ') + i; marks.appendChild(m); });
+  mr.appendChild(marks); lmap.appendChild(mr);
+  lmap.appendChild(row('V4.1-Flash', '40 层', 40, v41));
+  const br = el('div', 'lrow'); br.appendChild(el('div'));
+  const brk = el('div', 'brk');
+  const e1 = el('span', null, '编码器 0–19 · m=2'); e1.style.gridColumn = '1 / 21';
+  const e2 = el('span', null, '解码器 20–39 · m=1'); e2.style.gridColumn = '21 / 41';
+  brk.append(e1, e2); br.appendChild(brk); lmap.appendChild(br);
+
+  /* ---------- 2.3 compression rows ---------- */
+  const tok16 = $('#tok16'); for (let t = 0; t < 16; t++) tok16.appendChild(el('i', null, String(t)));
+  const m2 = $('#m2'); for (let j = 0; j < 8; j++) { const b = el('b', 'e', 'e' + j); b.style.gridColumn = (2 * j + 1) + ' / ' + (2 * j + 3); m2.appendChild(b); }
+  const m1 = $('#m1'); for (let j = 0; j < 16; j++) { const b = el('b', 'e', String(j)); m1.appendChild(b); }
+
+  /* ---------- 3.3 hierarchical candidate widget ---------- */
+  const S20 = [.12,.30,.08,.20, .55,.91,.40,.22, .10,.05,.18,.09, .33,.28,.47,.15, .06,.12,.09,.20,
+               .62,.35,.70,.44, .15,.22,.10,.31, .25,.84,.52,.19, .08,.14,.11,.07, .21,.16,.09,.12];
+  const S24 = [.40,.10,.22,.05, .18,.35,.80,.12, .95,.30,.20,.10, .15,.60,.25,.33, .09,.14,.70,.11,
+               .20,.45,.15,.66, .10,.12,.30,.08, .50,.28,.75,.40, .22,.18,.12,.30, .55,.20,.62,.35];
+  const BS = 4, NB = 10, TOPK = 4, kb = $('#kb'), kbOut = $('#kb-out'), out = $('#h-out');
+  const h20 = $('#h20'), h24 = $('#h24'), hidx = $('#hidx');
+  const mk = (host, arr) => Array.from({length: NB}, (_, b) => {
+    const blk = el('div', 'hblk'); const bars = [];
+    for (let k = 0; k < BS; k++) { const i = el('i'); i.style.height = Math.max(4, arr[b * BS + k] * 100) + '%'; blk.appendChild(i); bars.push(i); }
+    host.appendChild(blk); return { blk, bars };
+  });
+  const B20 = mk(h20, S20), B24 = mk(h24, S24);
+  for (let b = 0; b < NB; b++) hidx.appendChild(el('span', null, '块' + b));
+  const blockMax = Array.from({length: NB}, (_, b) => Math.max(...S20.slice(b * BS, b * BS + BS)));
+  const globalBest = S24.indexOf(Math.max(...S24));
+
+  function update(){
+    const K = +kb.value; kbOut.textContent = K;
+    const score = blockMax.map((v, b) => b === NB - 1 ? Infinity : v);
+    const chosen = score.map((v, b) => [v, b]).sort((a, c) => c[0] - a[0]).slice(0, K).map(x => x[1]).sort((a, c) => a - c);
+    B20.forEach((o, b) => { o.blk.classList.toggle('cand', chosen.includes(b)); });
+    const cand = [];
+    chosen.forEach(b => { for (let k = 0; k < BS; k++) cand.push(b * BS + k); });
+    const picks = cand.map(p => [S24[p], p]).sort((a, c) => c[0] - a[0]).slice(0, TOPK).map(x => x[1]).sort((a, c) => a - c);
+    B24.forEach((o, b) => {
+      const isC = chosen.includes(b); o.blk.classList.toggle('cand', isC); o.blk.classList.toggle('off', !isC);
+      o.bars.forEach((bar, k) => { const p = b * BS + k; bar.classList.toggle('pick', picks.includes(p)); bar.classList.toggle('miss', p === globalBest && !cand.includes(p)); });
+    });
+    const missed = !cand.includes(globalBest);
+    out.innerHTML =
+      '候选块 = [' + chosen.join(', ') + ']（块 9 为最新块，强制保留）→ 候选位置 ' + cand.length + ' / 40<br>' +
+      '第 24 层 top-4 = [' + picks.join(', ') + ']（按位置排序，与代码一致）<br>' +
+      (missed ? '<span style="color:var(--rope)">第 24 层全局最高分的位置 ' + globalBest + '（' + S24[globalBest].toFixed(2) + '）不在候选池里，被漏掉了：这就是分层带来的近似。</span>'
+              : '位置 ' + globalBest + ' 已进入候选池，第 24 层拿到了它真正想要的位置。');
+  }
+  kb.addEventListener('input', update); update();
+
+  /* ---------- TOC ---------- */
+  const toc = $('.toc'), mq = window.matchMedia('(max-width: 60rem)');
+  const sync = () => { if (mq.matches) toc.removeAttribute('open'); else toc.setAttribute('open', ''); };
+  sync(); mq.addEventListener ? mq.addEventListener('change', sync) : mq.addListener(sync);
+  toc.querySelectorAll('a').forEach(a => a.addEventListener('click', () => { if (mq.matches) toc.removeAttribute('open'); }));
+  const links = new Map([...toc.querySelectorAll('a')].map(a => [a.getAttribute('href').slice(1), a]));
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(es => es.forEach(e => {
+      if (!e.isIntersecting) return;
+      links.forEach(a => a.removeAttribute('aria-current'));
+      const a = links.get(e.target.id); if (a) a.setAttribute('aria-current', 'true');
+    }), { rootMargin: '-20% 0px -70% 0px' });
+    document.querySelectorAll('section.sec').forEach(s => io.observe(s));
+  }
+})();
+</script>
+<script>
+(function(){
+  /* ---------- tiny SVG string helpers ---------- */
+  const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const tx = (x, y, s, cls, a) => `<text x="${x}" y="${y}"${cls ? ` class="${cls}"` : ''}${a ? ' ' + a : ''}>${esc(s)}</text>`;
+  const rc = (x, y, w, h, cls, a) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" class="${cls}"${a ? ' ' + a : ''}/>`;
+  const ln = (x1, y1, x2, y2, cls, a) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="${cls || 'ln'}"${a ? ' ' + a : ''}/>`;
+  const marker = id => `<defs><marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>`;
+  const put = (id, html) => { const s = document.getElementById(id); if (s) s.innerHTML = html; };
+
+  /* ---------- layer roles, straight from inference/config.json ---------- */
+  const FULL = [2, 8, 14, 20], REIDX = [24, 28, 32, 36];
+  const IDXSRC = FULL.concat(REIDX).sort((a, b) => a - b);
+  const mode = i => i < 2 ? 'swa' : FULL.includes(i) ? 'full' : REIDX.includes(i) ? 'reindex' : 'reuse';
+  const kvSrc = i => FULL.filter(s => s <= i).pop();
+  const tkSrc = i => IDXSRC.filter(s => s <= i).pop();
+  const KVN = { 2: '①', 8: '②', 14: '③', 20: '④' };
+
+  /* ---------- 3.1 per-layer architecture ---------- */
+  (function(){
+    const T0 = 64, P = 20, GAP = 30;
+    const y = i => i >= 20 ? T0 + (39 - i) * P : T0 + 20 * P + GAP + (19 - i) * P;
+    const top = y(39) - 6, bot = y(0) + 24;
+    let h = marker('aA');
+    h += rc(82, 14, 202, 26, 'f-op') + tx(183, 31, 'DSpark：草拟 5 个 token', 'sm2', 'text-anchor="middle"');
+    h += ln(157, y(39), 157, 42, 'ln', 'marker-end="url(#aA)"');
+    for (let k = 0; k < 4; k++) h += ln(14 + k * 6, top, 14 + k * 6, bot, 'mhc');
+    h += tx(23, bot + 14, 'mHC×4', 'sm', 'text-anchor="middle"');
+    const dc = (y(39) + y(20) + 18) / 2, ec = (y(19) + y(0) + 18) / 2;
+    h += tx(46, dc, '解码器 L20–39 · m=1', 'hd', `text-anchor="middle" transform="rotate(-90 46 ${dc})"`);
+    h += tx(46, ec, '编码器 L0–19 · m=2', 'hd', `text-anchor="middle" transform="rotate(-90 46 ${ec})"`);
+
+    for (let i = 0; i < 40; i++) {
+      const yy = y(i), m = mode(i);
+      const cls = { swa: 'f-swa', full: 'f-full', reindex: 'f-reindex', reuse: 'f-reuse' }[m];
+      const lab = m === 'swa' ? 'SWA' : `CSA2(${i < 20 ? 2 : 1}, ${m[0].toUpperCase() + m.slice(1)})`;
+      h += `<g><title>L${i}：${lab}</title>`;
+      h += tx(74, yy + 13, 'L' + i, 'sm', 'text-anchor="end"');
+      h += rc(82, yy, 150, 18, cls) + tx(157, yy + 13, lab, m === 'full' ? 'sm2 t-inv' : 'sm2', 'text-anchor="middle"');
+      h += rc(238, yy, 46, 18, 'f-op') + tx(261, yy + 13, 'MoE', 'sm2', 'text-anchor="middle"');
+      let note;
+      if (m === 'swa') note = '只有 SWA（最近 128）';
+      else if (m === 'full') note = `写 KV${KVN[i]} · 自选 top-k` + (i === 20 ? ' · 建候选池' : '');
+      else if (m === 'reindex') note = '读 KV④ · 候选池内重选 top-k';
+      else note = `读 KV${KVN[kvSrc(i)]} · top-k ← L${tkSrc(i)}`;
+      if (i === 1 || i === 14) note += ' · Engram';
+      if (i >= 37) note += ' · DSpark';
+      h += tx(294, yy + 13, note, 'sm');
+      if (m === 'full') h += ln(500, yy + 9, 537, yy + 9, 'w-kv', 'marker-end="url(#aA)"');
+      else if (m !== 'swa') h += ln(512, yy + 9, 540, yy + 9, 'r-kv2');
+      h += '</g>';
+    }
+
+    [[2, 2, 7], [8, 8, 13], [14, 14, 19], [20, 20, 39]].forEach(([s, a, b]) => {
+      const yt = y(b), yb = y(a) + 18, c = (yt + yb) / 2;
+      h += rc(540, yt, 16, yb - yt, 'f-store');
+      h += tx(566, c - 8, `KV${KVN[s]}（L${s} 写）`, 'sm2');
+      h += tx(566, c + 6, `m=${s === 20 ? 1 : 2} · 每 token ${s === 20 ? 356 : 178} B`, 'sm');
+      h += tx(566, c + 20, `L${a}–${b} 读`, 'sm');
+    });
+
+    const px = 772;
+    h += `<path d="M560,${y(20) + 9} H${px} V${y(36) + 9}" class="r-tk"/>`;
+    h += tx(px + 8, y(21) + 13, '候选池', 'sm2') + tx(px + 8, y(20) + 13, '16,384 位置', 'sm');
+    REIDX.forEach(i => { h += `<circle cx="${px}" cy="${y(i) + 9}" r="3.5" class="dot-p"/>` + tx(px + 8, y(i) + 13, '→ L' + i, 'sm'); });
+
+    const ys = y(20) + 18 + GAP / 2;
+    h += ln(60, ys, 890, ys, 'sep');
+    h += tx(294, ys - 3, 'H₂₀ = 编码器输出 → L20 的输入，也是 KV④ 的来源', 'sm2');
+
+    const by = bot + 26;
+    h += rc(82, by, 202, 22, 'f-op') + tx(183, by + 15, 'Text + Vision Embedding', 'sm2', 'text-anchor="middle"');
+    h += ln(157, by, 157, y(0) + 20, 'ln', 'marker-end="url(#aA)"');
+    h += rc(82, by + 32, 202, 22, 'f-op') + tx(183, by + 47, 'Vision Encoder（DeepSeek-ViT）', 'sm2', 'text-anchor="middle"');
+    h += rc(294, by, 206, 22, 'f-op') + tx(397, by + 15, 'Engram 表 196B（host 内存）', 'sm2', 'text-anchor="middle"');
+    h += tx(510, by + 15, '→ 接入 L1、L14', 'sm');
+    put('arch', h);
+  })();
+
+  /* ---------- 3.2 CED scenarios ---------- */
+  (function(){
+    const W = 330, PX = 220, SL = 14;
+    const C = 'q-c', R = 'q-r', Pl = 'q-p', S = 'q-s';
+    const panels = [
+      ['(a) 冷启动 prefill', '没有任何缓存', [['enc', 0, W, C], ['l20', 0, W, C], ['dec', 0, W - SL, S], ['dec', W - SL, W, Pl]], 'cold'],
+      ['(b) 前缀命中，SWA 也命中', '几分钟内的下一轮对话', [['enc', 0, PX, R], ['enc', PX, W, C], ['l20', 0, PX, R], ['l20', PX, W, C], ['dec', 0, W - SL, S], ['dec', W - SL, W, Pl]], 'hit'],
+      ['(c) 前缀命中，SWA 已过期', 'Encoder Bounded Replay', [['enc', 0, PX - SL, R], ['enc', PX - SL, PX, Pl], ['enc', PX, W, C], ['l20', 0, PX - SL, R], ['l20', PX - SL, PX, Pl], ['l20', PX, W, C], ['dec', 0, W - SL, S], ['dec', W - SL, W, Pl]], 'hit'],
+      ['(d) decode 一个新 token', '每个新 token 走完 40 层', [['enc', 0, W - SL, R], ['enc', W - SL, W, C], ['l20', 0, W - SL, R], ['l20', W - SL, W, C], ['dec', 0, W - 2 * SL, S], ['dec', W - 2 * SL, W - SL, R], ['dec', W - SL, W, C]], 'dec']
+    ];
+    let h = '';
+    panels.forEach(([title, sub, spec, axis], k) => {
+      const ox = (k % 2) * 430, oy = Math.floor(k / 2) * 220, X0 = ox + 70;
+      const band = { dec: [oy + 46, 70], l20: [oy + 118, 8], enc: [oy + 128, 70] };
+      h += tx(ox + 4, oy + 18, title, 'ttl') + tx(ox + 4, oy + 34, sub, 'sm');
+      h += tx(X0 - 6, oy + 85, 'L21–39', 'sm', 'text-anchor="end"');
+      h += tx(X0 - 6, oy + 126, 'L20', 'sm', 'text-anchor="end"');
+      h += tx(X0 - 6, oy + 167, 'L0–19', 'sm', 'text-anchor="end"');
+      spec.forEach(([b, a, c, cls]) => { const [yy, hh] = band[b]; h += `<rect x="${X0 + a}" y="${yy}" width="${c - a}" height="${hh}" class="${cls}"/>`; });
+      const ay = oy + 212;
+      if (axis === 'cold') h += tx(X0 + W / 2, ay, 'prompt 的 N 个 token →', 'sm', 'text-anchor="middle"');
+      if (axis === 'hit') {
+        h += ln(X0 + PX, oy + 44, X0 + PX, oy + 200, 'sep');
+        h += tx(X0 + PX / 2, ay, '已缓存的前缀', 'sm', 'text-anchor="middle"') + tx(X0 + (PX + W) / 2, ay, '新增后缀', 'sm', 'text-anchor="middle"');
+      }
+      if (axis === 'dec') h += tx(X0 + (W - SL) / 2, ay, '已有的 token', 'sm', 'text-anchor="middle"') + tx(X0 + W - SL / 2, ay, '新', 'sm', 'text-anchor="middle"');
+    });
+    put('ced4', h);
+  })();
+
+  /* ---------- 3.3 CSA2 modes ---------- */
+  (function(){
+    let h = marker('aM');
+    const box = (ox, x, y, w, hh, cls, l1, l2, l3) =>
+      rc(ox + x, y, w, hh, cls) + tx(ox + x + w / 2, y + 14, l1, 'sm2', 'text-anchor="middle"') +
+      (l2 ? tx(ox + x + w / 2, y + 27, l2, 'sm', 'text-anchor="middle"') : '') +
+      (l3 ? tx(ox + x + w / 2, y + 40, l3, 'sm', 'text-anchor="middle"') : '');
+    const ar = (ox, x1, y1, x2, y2) => ln(ox + x1, y1, ox + x2, y2, 'ln', 'marker-end="url(#aM)"');
+    const panel = (ox, m) => {
+      const kv = m === 'full' ? 'n-new' : 'n-kv';
+      let s = tx(ox, 22, { full: 'Full（组长）', reindex: 'Reindex', reuse: 'Reuse' }[m], 'ttl');
+      s += tx(ox, 40, { full: '笔记自己写，位置自己挑', reindex: '笔记借来，位置在候选池里自己挑', reuse: '笔记和位置都借来' }[m], 'sm');
+      s += box(ox, 0, 56, 196, 30, 'n-op', '输出 64×512', '→ inverse RoPE → 输出投影');
+      s += box(ox, 0, 102, 196, 30, 'n-op', 'Core Attention', '64 head · 一次 softmax');
+      s += box(ox, 60, 150, 136, 30, 'n-op', '拼接 + sink', '128 + 512 + 1 = 641');
+      s += box(ox, 120, 198, 76, 30, 'n-op', '选中的主 KV', '512×512');
+      s += box(ox, 120, 246, 76, 30, 'n-op', '按下标取', 'Selection');
+      s += box(ox, 0, 352, 56, 46, 'n-new', 'Main Q', '64×512', '本层算');
+      s += box(ox, 60, 352, 56, 46, 'n-new', 'SWA KV', '128×512', 'FP8');
+      s += box(ox, 120, 352, 56, 46, kv, 'Main KV', 'N/m×512', 'FP4');
+      s += ar(ox, 98, 102, 98, 88) + ar(ox, 128, 150, 128, 134) + ar(ox, 28, 352, 28, 134) + ar(ox, 88, 352, 88, 182);
+      s += ar(ox, 158, 198, 158, 182) + ar(ox, 158, 246, 158, 230) + ar(ox, 148, 352, 148, 278);
+      if (m !== 'reuse') {
+        s += box(ox, 180, 352, 56, 46, kv, 'Idx K', 'N/m×128', 'FP4');
+        s += box(ox, 240, 352, 56, 46, 'n-new', 'Idx Q', '32×128', 'FP4');
+        s += box(ox, 180, 298, 116, 30, 'n-new', 'Indexer', m === 'full' ? '扫全部 N/m' : '只扫候选池');
+        s += box(ox, 216, 246, 80, 30, 'n-new', 'Top-K', '512 个下标');
+        s += ar(ox, 208, 352, 208, 330) + ar(ox, 268, 352, 268, 330) + ar(ox, 256, 298, 256, 278) + ar(ox, 216, 261, 198, 261);
+      } else {
+        s += box(ox, 216, 352, 80, 46, 'n-tk', 'Top-K', '512 个下标', '借来的');
+        s += `<path d="M${ox + 256},352 V261 H${ox + 198}" class="ln" marker-end="url(#aM)"/>`;
+      }
+      if (m === 'reindex') s += tx(ox + 178, 416, '↑ Main KV、Idx K 借自 L20', 'sm', 'text-anchor="middle"');
+      if (m === 'reuse') {
+        s += tx(ox + 148, 416, '↑ 借自最近的 Full 层', 'sm', 'text-anchor="middle"');
+        s += tx(ox + 296, 432, '↑ 借自最近挑过的层', 'sm', 'text-anchor="end"');
+      }
+      const foot = {
+        full: ['新写入全局 KV：主 KV + indexer K', 'indexer：扫全部 N/m 个 entry', '哪些层：L2、L8、L14、L20'],
+        reindex: ['新写入全局 KV：无', 'indexer：只扫候选池（≤ 16,384）', '哪些层：L24、L28、L32、L36'],
+        reuse: ['新写入全局 KV：无', 'indexer：不运行', '其余 30 层 · prefill 15 / decode 11 个 kernel']
+      }[m];
+      s += ln(ox, 446, ox + 296, 446, 'grid');
+      foot.forEach((t, j) => { s += tx(ox, 464 + j * 16, t, j === 0 ? 'sm2' : 'sm'); });
+      return s;
+    };
+    h += panel(10, 'full') + panel(335, 'reindex') + panel(660, 'reuse');
+    put('modes', h);
+  })();
+
+  /* ---------- 3.4 per-layer indexer workload ---------- */
+  (function(){
+    const svg = document.getElementById('ixbars'), sum = document.getElementById('ix-sum');
+    if (!svg) return;
+    const X0 = 64, BW = 19.5, Y0 = 236, YT = 24, lo = 3, hi = Math.log10(2e6);
+    const yv = v => Y0 - (Math.log10(v) - lo) / (hi - lo) * (Y0 - YT);
+    const cnt = (i, N) => { const m = mode(i); return m === 'full' ? (i < 20 ? N / 2 : N) : m === 'reindex' ? Math.min(N, 16384) : 0; };
+    const fmt = v => v >= 1048576 ? (v / 1048576) + 'M' : v >= 1024 ? (v / 1024) + 'K' : String(v);
+    function draw(N){
+      let h = '';
+      [[1e3, '1K'], [1e4, '10K'], [1e5, '100K'], [1e6, '1M']].forEach(([v, l]) => {
+        const yy = yv(v); h += ln(X0, yy, X0 + 40 * BW, yy, 'grid') + tx(X0 - 6, yy + 4, l, 'sm', 'text-anchor="end"');
+      });
+      const labelled = {};
+      for (let i = 0; i < 40; i++) {
+        const v = cnt(i, N), x = X0 + i * BW + 2, w = BW - 4, m = mode(i);
+        if (v > 0) {
+          const yy = yv(v);
+          h += `<g><title>L${i} · ${m === 'full' ? 'Full' : 'Reindex'} · 打分 ${v.toLocaleString()} 个位置</title>${rc(x, yy, w, Y0 - yy, m === 'full' ? 'f-full' : 'f-reindex')}</g>`;
+          const key = (i < 20 ? 'e' : 'd') + m;
+          if (!labelled[key]) { labelled[key] = 1; h += tx(x + w / 2, yy - 5, fmt(v), 'sm2', 'text-anchor="middle"'); }
+        } else {
+          h += `<g><title>L${i} · ${m === 'swa' ? '纯 SWA' : 'Reuse'} · 不打分</title><rect x="${x}" y="${YT}" width="${w}" height="${Y0 - YT}" fill="#000" fill-opacity="0"/>${rc(x, Y0 - 3, w, 3, 'f-zero')}</g>`;
+        }
+      }
+      h += ln(X0, Y0, X0 + 40 * BW, Y0, 'ln');
+      [0, 2, 8, 14, 20, 24, 28, 32, 36, 39].forEach(i => { h += tx(X0 + i * BW + BW / 2, Y0 + 14, 'L' + i, 'sm', 'text-anchor="middle"'); });
+      h += ln(X0 + 2, Y0 + 24, X0 + 20 * BW - 3, Y0 + 24, 'ln') + tx(X0 + 10 * BW, Y0 + 40, '编码器（m=2，Full 层扫 N/2）', 'sm', 'text-anchor="middle"');
+      h += ln(X0 + 20 * BW + 3, Y0 + 24, X0 + 40 * BW - 2, Y0 + 24, 'ln') + tx(X0 + 30 * BW, Y0 + 40, '解码器（m=1，L20 扫 N）', 'sm', 'text-anchor="middle"');
+      svg.innerHTML = h;
+      let tot = 0; for (let i = 0; i < 40; i++) tot += cnt(i, N);
+      const v41 = tot * 32, v4 = 21 * (N / 4) * 64;
+      sum.innerHTML = `上下文 ${fmt(N)}：V4.1 一共打分 ${tot.toLocaleString()} 个位置 × 32 head ≈ ${(v41 / 1e6).toFixed(1)}M 次点积<br>` +
+        `V4-Flash：21 层 × ${fmt(N / 4)} 个 entry × 64 head ≈ ${(v4 / 1e6).toFixed(1)}M 次点积 → V4.1 约为它的 ${(v41 / v4 * 100).toFixed(0)}%`;
+      document.querySelectorAll('[data-n]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.n === N)));
+    }
+    document.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => draw(+b.dataset.n)));
+    draw(1048576);
+  })();
+
+  /* ---------- 3.5 FP4 nibble row ---------- */
+  (function(){
+    const nib = document.getElementById('nib'); if (!nib) return;
+    for (let k = 0; k < 16; k++) { const s = document.createElement('span'); s.textContent = '4b'; nib.appendChild(s); }
+    const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = 'scale 8b'; nib.appendChild(sc);
+  })();
+})();
+</script>
+<script>
+(function(){
+  const g = document.getElementById('dgrid'); if (!g) return;
+  const L = 6, T = 32, W = 4, t = T - 1, S = T - W;
+  const kIn = document.getElementById('dep-k'), kOut = document.getElementById('dep-k-out'), ctl = document.getElementById('dep-ctl');
+  const out = document.getElementById('dep-out'), leg = document.getElementById('dep-legend');
+  const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  g.appendChild(mk('span', 'rl', ''));
+  for (let s = 0; s < T; s++) g.appendChild(mk('span', 'ch', (s % 4 === 0 || s === t) ? String(s) : ''));
+  const cells = [];
+  for (let j = L - 1; j >= 0; j--) {
+    g.appendChild(mk('span', 'rl', 'L' + j));
+    cells[j] = [];
+    for (let s = 0; s < T; s++) { const c = mk('i'); c.title = 'L' + j + ' · token ' + s; g.appendChild(c); cells[j][s] = c; }
+  }
+  // exact refill: layer j must reprocess tokens from exactLo(j) so the top layer's ring (last W tokens) is exact
+  const exactLo = j => T - W - (L - 1 - j) * (W - 1);
+  const LEG = {
+    one: [['var(--ink)', '', '目标格'], ['var(--csa-mid)', '', '必须先算出来的格子']],
+    decode: [['var(--csa)', '', '本步新算'], ['var(--swa-soft)', 'var(--swa)', '环形缓冲里已有的笔记'], ['var(--sunk)', '', '早就算过']],
+    exact: [['var(--csa-mid)', '', '必须重算']],
+    bounded: [['var(--swa)', '', '重放：只算这些'], ['var(--rope-soft)', 'var(--rope)', '被截断：精确恢复要算、这里不算']]
+  };
+  let mode = 'one';
+  function paint(){
+    const k = +kIn.value; kOut.textContent = 'L' + k;
+    ctl.hidden = mode !== 'one';
+    let n = 0;
+    for (let j = 0; j < L; j++) for (let s = 0; s < T; s++) {
+      let c = '';
+      if (mode === 'one') { if (j <= k && s >= t - (k - j + 1) * (W - 1)) c = (j === k && s === t) ? 'tgt' : 'need'; }
+      else if (mode === 'decode') c = s === t ? 'new' : s >= t - (W - 1) ? 'ring' : 'old';
+      else if (mode === 'exact') { if (s >= exactLo(j)) c = 'need'; }
+      else c = s >= S ? 'rep' : s >= exactLo(j) ? 'cut' : '';
+      cells[j][s].className = c;
+      if (c === 'need' || c === 'tgt' || c === 'new' || c === 'rep') n++;
+    }
+    leg.innerHTML = '';
+    LEG[mode].forEach(([bg, bd, txt]) => { const sp = mk('span', null, txt); sp.style.setProperty('--sw', bg); if (bd) sp.style.setProperty('--sb', bd); leg.appendChild(sp); });
+    const lo = t - (k + 1) * (W - 1);
+    out.innerHTML = {
+      one: `目标：token ${t} 在 L${k} 的输出（深色格）。要先算出 ${n} 个格子。<br>L0 要从 token ${lo} 算起，共 ${t - lo + 1} 个 token = (${k} + 1) × 3 + 1。<br>换成真实窗口 128：L0 要 ${(128 + k * 127).toLocaleString()} 个 token。把目标层往上拖，看三角形怎么变宽。`,
+      decode: `正常 decode：token 0–30 早就逐层算过，每层的环形缓冲（绿框）里存着 token 28–30 的笔记。<br>新 token 31 在每层只算自己这 1 格，共 ${n} 格，不需要回头重算。`,
+      exact: `SWA 缓存丢了，要把 6 层的环形缓冲（每层 token 28–31 的笔记）精确补回来：共 ${n} 格，最底层要从 token ${exactLo(0)} 算起。<br>真实规模（40 层、窗口 128，推算）：最底层约 5,081 个 token，一共约 10.4 万个“层 × token”。`,
+      bounded: `Bounded Replay：每层只重放最后 4 个 token（绿色），共 ${n} 格；斜线格是精确恢复要算、这里被截断不算的部分。<br>代价：重放起点 token 28 在每一层的 SWA 里都只能看到自己，后面几个 token 也看不全窗口，所以结果是近似的。<br>真实规模（推算）：40 × 128 = 5,120 个“层 × token”，约为精确恢复的 1/20。`
+    }[mode];
+    document.querySelectorAll('[data-dep]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dep === mode)));
+  }
+  document.querySelectorAll('[data-dep]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.dep; paint(); }));
+  kIn.addEventListener('input', paint);
+  paint();
+})();
+</script>
+</body>
+</html>
