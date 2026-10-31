@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LMCache MP 最终优化：四项改动</title>
+<style>
+:root{--bg:#f4f5f6;--card:#ffffff;--ink:#16191d;--ink2:#454d57;--muted:#69717b;--rule:#dce0e5;--rule2:#eceef1;
+--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--bad:#c4552b;--good:#23845a;--code:#eef0f2;--gpu:#c9d1d8;--cpu:#7c858f}
+@media (prefers-color-scheme: dark){:root{--bg:#111316;--card:#181b1f;--ink:#e8eaed;--ink2:#bcc2ca;--muted:#8e959e;--rule:#2c3137;--rule2:#22262b;
+--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--bad:#dd7347;--good:#33a06d;--code:#22262b;--gpu:#46505a;--cpu:#8a939d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 "Microsoft YaHei","PingFang SC","Noto Sans SC",system-ui,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:25px;margin:0 0 4px}
+h2{font-size:20px;margin:36px 0 10px;padding-top:6px;border-top:2px solid var(--rule)}
+h3{font-size:16px;margin:22px 0 8px}
+p{margin:6px 0}
+.sub{color:var(--muted);font-size:13px}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:14px 18px;margin:12px 0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr));gap:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:12px;margin:10px 0}
+.kpi{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:12px 14px}
+.kpi .t{font-size:13px;color:var(--ink2)}
+.kpi .v{font-size:24px;font-weight:700;color:var(--good);margin:2px 0}
+.kpi .d{font-size:13px;color:var(--muted)}
+.opt{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:12px;margin:12px 0}
+.opt div{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:10px 14px;font-size:14px}
+.opt b.n{display:inline-block;width:22px;height:22px;border-radius:11px;background:var(--ink);color:var(--card);text-align:center;line-height:22px;margin-right:6px;font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}
+th,td{border:1px solid var(--rule);padding:6px 9px;text-align:left;vertical-align:top}
+th{background:var(--rule2);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font:13px ui-monospace,Consolas,monospace}
+pre{background:var(--code);padding:10px 12px;border-radius:6px;overflow-x:auto;font:13px/1.5 ui-monospace,Consolas,monospace;margin:8px 0}
+ul,ol{margin:6px 0;padding-left:22px}li{margin:3px 0}
+.note{font-size:13px;color:var(--ink2);background:var(--rule2);border-left:3px solid var(--muted);padding:8px 12px;border-radius:4px;margin:10px 0}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--ink2);margin:4px 0 8px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+svg text{font-family:"Microsoft YaHei","PingFang SC","Noto Sans SC",system-ui,sans-serif}
+.chart{width:100%;height:auto;display:block}
+#tip{position:fixed;pointer-events:none;background:var(--card);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:6px 10px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none;z-index:9}
+a{color:var(--s1)}
+
+/* figures imported from the RPC-overheads report */
+:root{--ink-2:var(--ink2);--rule-2:var(--rule2);--surface:var(--card);--stock:var(--s2);--all:var(--good);--inproc:var(--s1);--single:#7350C7;--d-cpu:var(--cpu);--d-gpu:var(--gpu);
+--sans:"Microsoft YaHei","PingFang SC","Noto Sans SC",system-ui,sans-serif;--mono:ui-monospace,Consolas,"Microsoft YaHei",monospace}
+.dg .dg-cin{fill:var(--ink);font:10.5px var(--sans);dominant-baseline:middle}
+.dg .dg-h{fill:var(--ink);font:500 13px var(--sans)}
+.dg .dg-in{fill:#FFFFFF;font:10.5px var(--sans);dominant-baseline:middle}
+.dg .dg-rpc{fill:var(--ink);font:500 11.5px var(--mono)}
+.dg .dg-wl{fill:var(--ink-2);font:11.5px var(--sans)}
+.dg-al{fill:var(--all)}.dg-arrowhead{fill:var(--ink-2)}.dg-axis{stroke:var(--ink-2);stroke-width:1}
+.dg-box{fill:none;stroke:var(--rule);stroke-width:1.2}.dg-br{fill:none;stroke:var(--ink-2);stroke-width:1.2}
+.dg-cell{fill:var(--d-gpu);stroke:var(--muted);stroke-width:.8}.dg-chain{stroke:var(--ink-2);stroke-width:1}
+.dg-guide{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}.dg-stl{fill:var(--stock);fill-opacity:.25}.dg-st{fill:var(--stock)}
+.dg-wire{stroke:var(--ink-2);stroke-width:1.4}
+.chart .grid{stroke:var(--rule-2);stroke-width:1}.chart .tick{fill:var(--muted);font:11px var(--mono)}
+.lang{position:fixed;top:14px;right:16px;z-index:10;background:var(--card);color:var(--ink);border:1px solid var(--rule);border-radius:16px;padding:4px 14px;font-size:13px;text-decoration:none;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.lang:hover{border-color:var(--s1);color:var(--s1)}
+</style>
+</head>
+<body>
+<a class="lang" id="lang" href="en.html" hreflang="en" lang="en">English</a>
+<div class="wrap">
+<h1>LMCache MP 最终优化：四项改动</h1>
+<p class="sub">2026-10-31 · ATOM 通过 LMCache MP（<code>lmcache_driven</code> 模式）做 KV offload · 代码：<a href="https://github.com/yhl-amd/LMCache/pull/2">yhl-amd/LMCache#2</a>（三项补丁，基于 ATOM 镜像自带的 LMCache f22dec28）、<a href="https://github.com/yhl-amd/LMCache/pull/3">#3</a>（事件池移植到 LMCache dev，含复现脚本）</p>
+
+<div class="card" style="border-left:4px solid var(--good)">
+<p><b>一句话</b>：LMCache server 处理每个 RPC 时有四处浪费：<b>销毁 event 要等拷贝做完</b>、<b>每个请求都带着整段 token 前缀</b>、<b>ObjectKey 一个一个构造和校验</b>、<b>4 个 rank 只有 1 个线程排一队</b>。四项改动各去掉一处，互不重复。</p>
+</div>
+<div class="opt">
+  <div><b class="n">1</b><b>IPC event 复用（事件池）</b><br>event 反复 record、只导入一次，不再按操作销毁</div>
+  <div><b class="n">2</b><b>token hash 挪到 client</b><br>不再发整段 token 前缀，只发这段范围的块哈希</div>
+  <div><b class="n">3</b><b>批量构造 ObjectKey</b><br>同一次调用只校验一次，批量填字段</div>
+  <div><b class="n">4</b><b><code>--max-gpu-workers 4</code></b><br>每个 rank 一个线程，不再排一队</div>
+</div>
+
+<p><b>真实服务</b>（MiniMax-M3 TP4 c48 agentic，前三项，server 1 个线程，3 次 vs 3 次）：</p>
+<div class="kpis">
+  <div class="kpi"><div class="t">server 上 store 执行均值</div><div class="v">30.7 → 3.0 ms</div><div class="d">−90 %</div></div>
+  <div class="kpi"><div class="t">从 LMCache 读回 KV，p50</div><div class="v">855 → 215 ms</div><div class="d">−75 %；p99 9.7 → 2.8 s</div></div>
+  <div class="kpi"><div class="t">TTFT p90</div><div class="v">1911 → 1525 ms</div><div class="d">−20 %，每次都低于原版每次</div></div>
+  <div class="kpi"><div class="t">server store/retrieve 线程忙碌</div><div class="v">45 % → 4.6 %</div><div class="d">持有 GIL 采样 2746 → 671</div></div>
+</div>
+<p><b>server 单独压测</b>（ATOM 镜像自带的 LMCache f22dec28 + PR #2，四项全开，不跑模型，4×MI355X，2 轮）：</p>
+<div class="kpis">
+  <div class="kpi"><div class="t">单条会话 store / retrieve p50</div><div class="v">97/614 → 38/159 ms</div><div class="d">−61 % / −74 %</div></div>
+  <div class="kpi"><div class="t">16 条 64k / 32 条 32k 同时到达，总耗时</div><div class="v">3.21/3.95 → 0.86/1.11 s</div><div class="d">−73 % / −72 %</div></div>
+  <div class="kpi"><div class="t">多会话时 retrieve p90</div><div class="v">1.53 → 0.33 s</div><div class="d">−79 %</div></div>
+</div>
+
+<h2>1. 总览图解：原版 vs 四项全开</h2>
+<p>例子：一个 153,600 token 的 prompt 在 prefill 最后一步，4 个 rank 同时发来 store；同时另一个新请求发来 lookup。CPU 部分按实测量级画：解码一个带整段 token 的请求 2.4 ms，哈希整段 prompt 2.6 ms，构造 2,400 个 ObjectKey 1.7 ms（批量 0.44 ms），handler 约 3 ms；拷贝 383 MB 按 20 ms 估。</p>
+<div class="legend">
+  <span><i style="background:var(--s2)"></i>解码整段 token（持有 GIL）</span>
+  <span><i style="background:var(--s4)"></i>哈希整段 prompt / 逐个构造 key</span>
+  <span><i style="background:var(--cpu)"></i>handler 处理（约 3 ms）</span>
+  <span><i style="background:var(--bad)"></i>卡在销毁 event，等拷贝做完</span>
+  <span><i style="background:transparent;border:1px dashed var(--muted)"></i>排队，GPU 空等</span>
+  <span><i style="background:var(--gpu)"></i>GPU 拷贝</span>
+</div>
+<div class="card" style="padding:8px 10px"><svg id="ovr" class="chart" viewBox="0 0 1000 560" role="img" aria-label="原版与四项全开的 server 时间线"></svg></div>
+<ul>
+<li><b>原版</b>：ZMQ 线程先把 5 个请求里的整段 token 逐个解码（共约 12 ms，期间持有 GIL）；唯一的 store/retrieve 线程处理完一个 rank 就卡在销毁上等这张卡拷完，4 张卡的拷贝串成一条，约 94 ms 才全部完成；lookup 线程还要把整段 prompt 重新哈希、逐个构造 2,400 个 key。</li>
+<li><b>四项全开</b>：请求里只有块哈希，解码几乎不花时间（第 2 项）；lookup 线程不用再哈希，key 批量构造（第 2、3 项）；4 个线程各管一个 rank（第 4 项），处理完不再卡在销毁上（第 1 项），约 23 ms 全部完成。</li>
+</ul>
+
+<h2>2. 背景：一次 store / retrieve 里发生了什么</h2>
+<p>ATOM 把 KV cache 显存注册给 LMCache server，server 在自己的拷贝 stream 上直接读写 ATOM 的显存。每次 store / retrieve：</p>
+<ol>
+<li>ATOM 发一个 RPC，带 <b>key</b>（原版是从第 0 个 token 开始的整段 token 前缀）、block 号和一个跨进程 event 的 handle；</li>
+<li>server 解码请求，用 token 算出每块的哈希，构造 ObjectKey，在 L1 里分配或查找；</li>
+<li>server 用两个跨进程 event 和 ATOM 在 GPU 上排先后（下表），排好拷贝后回复。</li>
+</ol>
+<table>
+<tr><th></th><th>① 生产者 event（ATOM → server）</th><th>② 完成 event（server → ATOM）</th></tr>
+<tr><td>意思</td><td>“KV 写完了，可以拷”</td><td>“拷完了，block 可以放 / 请求可以跑”</td></tr>
+<tr><td>谁插</td><td>ATOM，插在写 KV 的 forward 后面</td><td>server，插在拷贝后面</td></tr>
+<tr><td>对方怎么用</td><td>server 的拷贝 stream 先 wait 它（在 GPU 上等）</td><td>ATOM 每步 query 它（不阻塞）</td></tr>
+<tr><td>原版生命周期</td><td>server 每次导入，用完销毁</td><td>server 每次新建；ATOM 每次导入，用完销毁</td></tr>
+</table>
+
+<h2>3. 优化 1：IPC event 复用（事件池）</h2>
+<h3>3.1 问题：销毁 event 会卡住线程</h3>
+<ul>
+<li>ROCm 7.2.x 上销毁跨进程 event 走 <code>~IPCEvent</code> → <code>ihipHostUnregister</code> → <code>SyncAllStreams</code>，要等本进程在这张卡上排着的<b>所有</b>工作做完才返回（<a href="https://github.com/ROCm/rocm-systems/issues/7520">rocm-systems#7520</a>；develop 已由 #7710 修复，7.2 的 backport #11529 未合）。</li>
+<li>销毁期间，别的线程<b>新建</b>跨进程 event 也会被卡住（实测 43 µs → 38.6 ms）。</li>
+<li>原版每次 store/retrieve 都要新建、导入、销毁 event，每次操作卡一次。LMCache dev 的 #5439 把销毁挪到了另一个线程，但每次操作还是要销毁。</li>
+</ul>
+<p><b>卡住的时间是在等拷贝，不是销毁本身</b>：</p>
+<div class="legend">
+  <span><i style="background:var(--s1)"></i>销毁本身（约 1.3 ms）</span>
+  <span><i style="background:var(--bad)"></i>销毁在等 GPU 排空（<code>SyncAllStreams</code>）</span>
+  <span><i style="background:var(--gpu)"></i>这张卡上的 GPU 工作</span>
+</div>
+<div class="card" style="padding:8px 10px"><svg id="dst" class="chart" viewBox="0 0 1000 300" role="img" aria-label="三种情况下销毁 event 的耗时拆分"></svg></div>
+<div class="grid2">
+  <div class="card"><b>实测：销毁耗时随“卡上排着的工作”线性增加</b>
+    <svg id="dst2" class="chart" viewBox="0 0 500 300" role="img" aria-label="销毁耗时与 GPU 上排着的工作量"></svg>
+    <p class="sub">MI355X，ROCm 7.2.4。虚线是“销毁耗时 = 排着的工作 + 1.3 ms”。</p>
+  </div>
+  <div class="card"><b>真实服务里卡得更久</b>
+    <p>线上 GPU 还在跑 forward，销毁要连 forward 一起等。MiniMax-M3 TP4 c48 线上服务加探针实测：</p>
+    <table>
+      <tr><th>真实服务里销毁跨进程 event</th><th class="num">耗时</th></tr>
+      <tr><td>p50</td><td class="num"><b>8–10 ms</b></td></tr>
+      <tr><td>最长（碰上长 prefill 步）</td><td class="num"><b>2.4 s</b></td></tr>
+    </table>
+  </div>
+</div>
+
+<h3>3.2 改法：event 反复 record，handle 只导入一次</h3>
+<div class="legend">
+  <span><i style="background:var(--cpu)"></i>CPU 正常处理</span>
+  <span><i style="background:var(--gpu)"></i>GPU 工作</span>
+  <span><i style="background:var(--bad)"></i>销毁 event：线程卡住，等这张卡拷完</span>
+  <span><i style="background:transparent;border:1px dashed var(--muted)"></i>在等 / 排队</span>
+  <span><i style="background:var(--good)"></i>② 到了，block 可以放</span>
+</div>
+<div class="card" style="padding:8px 10px"><svg id="swim" class="chart" viewBox="0 0 1000 560" role="img" aria-label="一次 store 的时间线：原版与事件池"></svg></div>
+<table>
+<tr><th></th><th>原版（每次操作）</th><th>事件池</th></tr>
+<tr><td>① 生产者 event</td><td>ATOM 每步新建</td><td>client 16 个轮换 record；每个记满 31 次换新（绕开 ROCm 7.2.x 的 32 次 bug）</td></tr>
+<tr><td>server 导入 ①</td><td>导入 1 次 + 销毁 1 次</td><td>每个 handle 只导入 1 次，缓存，不销毁</td></tr>
+<tr><td>② 完成 event</td><td>每次新建；队列满后每次再销毁 1 个</td><td>每个实例 512 个轮流 record，不销毁</td></tr>
+<tr><td>ATOM 导入 ②</td><td>导入 1 次 + 销毁 1 次</td><td>只导入 1 次，缓存</td></tr>
+<tr><td><b>合计</b></td><td><b>新建 1、导入 2、销毁 3</b></td><td><b>稳定后 0</b></td></tr>
+</table>
+<ul>
+<li><b>为什么安全</b>：record 是把 event 挪到新位置，wait/query 看的总是最近一次；被提前重新 record 时，对方只会看到同一条 stream 上更靠后的位置，<b>只会多等，不会提前放行</b>。两进程互相复用 400 轮：0 次提前放行、0 次误报。</li>
+<li><b>不会泄漏</b>：写入相同数据量时，原版和事件池占用的 L1 内存一样（8 万个 chunk 后 485 GB 对 484 GB）。</li>
+</ul>
+
+<h2>4. 优化 2：token hash 挪到 client，不再发整段 token</h2>
+<p>KV 块的 key 是链式哈希：h<sub>k</sub> = blake3(h<sub>k−1</sub> ‖ 第 k 块的 256 个 token)，任何一块的 key 都取决于它前面的全部 token。原版协议只让 server 算哈希，所以 ATOM 在 lookup、store、retrieve、free_lookup_locks 里<b>每次都发从第 0 个 token 开始的整段前缀</b>，每个 rank 都发，前缀越长请求越大；server 在 ZMQ 线程上持有 GIL 解码，拷进 session，再哈希。改后由 client 按请求增量算好块哈希，RPC 里只带这段范围的哈希。</p>
+
+<h3>图解 ②-1：一个 store 请求里装的是什么，原版传全部 token，改后只传块哈希</h3>
+<div class="card" style="padding:8px 10px"><svg viewBox="0 0 1000 360" role="img" aria-label="一个 store 请求里装的内容：原版传全部 token，改后只传块哈希" class="chart dg"><defs><marker id="wArr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" class="dg-arrowhead"/></marker></defs><rect x="8" y="5" width="10" height="10" rx="2" class="dg-st"/><text x="24" y="15" class="dg-h">原版：key 里装全部 token，server 自己算哈希</text><text x="20" y="40" class="dg-wl">ATOM rank 2（client）要存块 536–599，构造 key 用 token_ids[:aligned]：</text><rect x="20.0" y="80" width="50" height="24" rx="3" class="dg-stl"/><text x="45.0" y="92.0" class="dg-cin" text-anchor="middle">块 0</text><rect x="74.0" y="80" width="50" height="24" rx="3" class="dg-stl"/><text x="99.0" y="92.0" class="dg-cin" text-anchor="middle">块 1</text><rect x="128.0" y="80" width="50" height="24" rx="3" class="dg-stl"/><text x="153.0" y="92.0" class="dg-cin" text-anchor="middle">块 2</text><text x="195" y="96.0" class="dg-wl" text-anchor="middle">…</text><rect x="212.0" y="80" width="50" height="24" rx="3" class="dg-stl"/><text x="237.0" y="92.0" class="dg-cin" text-anchor="middle">块 535</text><rect x="276.0" y="80" width="50" height="24" rx="3" class="dg-st"/><text x="301.0" y="92.0" class="dg-in" text-anchor="middle">块 536</text><rect x="330.0" y="80" width="50" height="24" rx="3" class="dg-st"/><text x="355.0" y="92.0" class="dg-in" text-anchor="middle">块 537</text><text x="397" y="96.0" class="dg-wl" text-anchor="middle">…</text><rect x="414.0" y="80" width="50" height="24" rx="3" class="dg-st"/><text x="439.0" y="92.0" class="dg-in" text-anchor="middle">块 599</text><path d="M276.0 76 V70 H464.0 V76" class="dg-br"/><text x="370.0" y="64" class="tick" text-anchor="middle">这次要存的 64 块</text><path d="M20.0 108 V114 H464.0 V108" class="dg-br"/><text x="242.0" y="128" class="dg-wl" text-anchor="middle">全部装进 key：t[0 : 153,600)，153,600 个 token</text><line x1="492" y1="92" x2="642" y2="92" class="dg-wire" marker-end="url(#wArr)"/><rect x="500" y="48" width="130" height="36" rx="4" class="dg-st"/><text x="561.0" y="62" class="dg-in" text-anchor="middle">153,600 个 token</text><text x="561.0" y="77" class="dg-in" text-anchor="middle">0.43 MB</text><text x="561.0" y="107" class="tick" text-anchor="middle">ZMQ</text><rect x="652" y="30" width="340" height="118" rx="6" class="dg-box"/><text x="664" y="50" class="dg-h">LMCache server</text><text x="664" y="72" class="dg-wl">① ZMQ 线程解码 153,600 个 token：约 2.3 ms，持有 GIL</text><text x="664" y="91" class="dg-wl">② 用 token 算链式哈希：h536 要先有 h535 … 一直</text><text x="681" y="110" class="dg-wl">追到 h0，所以必须拿到从第 0 个起的 token</text><text x="664" y="129" class="dg-wl">③ 拿 h536 … h599 建 ObjectKey，开始拷贝</text><line x1="8" y1="174" x2="992" y2="174" class="grid"/><rect x="8" y="191" width="10" height="10" rx="2" class="dg-al"/><text x="24" y="201" class="dg-h">改后：client 算好哈希，key 里只装这 64 块的哈希</text><text x="20" y="228" class="dg-wl">ATOM rank 2（client）里的 adapter 按请求增量算链式哈希，token 不发出去：</text><rect x="20.0" y="246" width="50" height="24" rx="3" class="dg-cell" stroke-dasharray="3 2"/><text x="45.0" y="258.0" class="dg-cin" text-anchor="middle">块 0</text><rect x="74.0" y="246" width="50" height="24" rx="3" class="dg-cell" stroke-dasharray="3 2"/><text x="99.0" y="258.0" class="dg-cin" text-anchor="middle">块 1</text><rect x="128.0" y="246" width="50" height="24" rx="3" class="dg-cell" stroke-dasharray="3 2"/><text x="153.0" y="258.0" class="dg-cin" text-anchor="middle">块 2</text><text x="195" y="262.0" class="dg-wl" text-anchor="middle">…</text><rect x="212.0" y="246" width="50" height="24" rx="3" class="dg-cell" stroke-dasharray="3 2"/><text x="237.0" y="258.0" class="dg-cin" text-anchor="middle">块 535</text><rect x="276.0" y="246" width="50" height="24" rx="3" class="dg-cell" stroke-dasharray="3 2"/><text x="301.0" y="258.0" class="dg-cin" text-anchor="middle">块 536</text><rect x="330.0" y="246" width="50" height="24" rx="3" class="dg-cell" stroke-dasharray="3 2"/><text x="355.0" y="258.0" class="dg-cin" text-anchor="middle">块 537</text><text x="397" y="262.0" class="dg-wl" text-anchor="middle">…</text><rect x="414.0" y="246" width="50" height="24" rx="3" class="dg-cell" stroke-dasharray="3 2"/><text x="439.0" y="258.0" class="dg-cin" text-anchor="middle">块 599</text><line x1="301.0" y1="272" x2="301.0" y2="295" class="dg-wire" marker-end="url(#wArr)"/><line x1="355.0" y1="272" x2="355.0" y2="295" class="dg-wire" marker-end="url(#wArr)"/><line x1="439.0" y1="272" x2="439.0" y2="295" class="dg-wire" marker-end="url(#wArr)"/><text x="268" y="288" class="tick" text-anchor="end">blake3（每块 256 个 token + 前一块的哈希）</text><rect x="25.0" y="298" width="40" height="24" rx="3" class="dg-cell"/><text x="45.0" y="310.0" class="dg-cin" text-anchor="middle">h0</text><rect x="79.0" y="298" width="40" height="24" rx="3" class="dg-cell"/><text x="99.0" y="310.0" class="dg-cin" text-anchor="middle">h1</text><rect x="133.0" y="298" width="40" height="24" rx="3" class="dg-cell"/><text x="153.0" y="310.0" class="dg-cin" text-anchor="middle">h2</text><text x="195" y="314.0" class="dg-wl" text-anchor="middle">…</text><rect x="217.0" y="298" width="40" height="24" rx="3" class="dg-cell"/><text x="237.0" y="310.0" class="dg-cin" text-anchor="middle">h535</text><rect x="281.0" y="298" width="40" height="24" rx="3" class="dg-al"/><text x="301.0" y="310.0" class="dg-in" text-anchor="middle">h536</text><rect x="335.0" y="298" width="40" height="24" rx="3" class="dg-al"/><text x="355.0" y="310.0" class="dg-in" text-anchor="middle">h537</text><text x="397" y="314.0" class="dg-wl" text-anchor="middle">…</text><rect x="419.0" y="298" width="40" height="24" rx="3" class="dg-al"/><text x="439.0" y="310.0" class="dg-in" text-anchor="middle">h599</text><line x1="65.0" y1="310" x2="76.0" y2="310" class="dg-chain" marker-end="url(#wArr)"/><line x1="119.0" y1="310" x2="130.0" y2="310" class="dg-chain" marker-end="url(#wArr)"/><line x1="321.0" y1="310" x2="332.0" y2="310" class="dg-chain" marker-end="url(#wArr)"/><line x1="257.0" y1="310" x2="280.0" y2="310" class="dg-chain" marker-end="url(#wArr)"/><path d="M20.0 326 V332 H262.0 V326" class="dg-br"/><text x="20.0" y="346" class="dg-wl" text-anchor="start">h0 … h535：本请求 retrieve 时已算好，缓存着</text><path d="M276.0 326 V332 H464.0 V326" class="dg-br"/><text x="370.0" y="346" class="dg-wl" text-anchor="middle">这一步只新算 64 个</text><line x1="492" y1="310" x2="642" y2="310" class="dg-wire" marker-end="url(#wArr)"/><rect x="500" y="266" width="130" height="36" rx="4" class="dg-al"/><text x="561.0" y="280" class="dg-in" text-anchor="middle">64 个块哈希 × 32 B</text><text x="561.0" y="295" class="dg-in" text-anchor="middle">2 KB</text><text x="561.0" y="325" class="tick" text-anchor="middle">ZMQ</text><rect x="652" y="212" width="340" height="118" rx="6" class="dg-box"/><text x="664" y="232" class="dg-h">LMCache server</text><text x="664" y="254" class="dg-wl">① 解码 2 KB：约 0.8 µs</text><text x="664" y="273" class="dg-wl">② 每 32 B 切出一个哈希，校验个数 = (end − start) / 256</text><text x="664" y="292" class="dg-wl">③ 直接建 ObjectKey，开始拷贝；不解码、不拷贝、</text><text x="681" y="311" class="dg-wl">不哈希 token</text></svg></div>
+<p class="sub">例子取自下图那一轮：rank 2 存这一轮新算的块 536–599（token 137,216–153,599）。块哈希是链式的：h<sub>k</sub> = blake3(h<sub>k−1</sub> ‖ 第 k 块的 256 个 token)，h0 前面接的是 none_hash，所以任何一块的 key 都取决于它前面的全部 token。原版协议只让 server 算哈希，client 只能每次从第 0 个 token 发起；server 的 session 缓存了前面的哈希时只补算新块，但 token 照样整段发、整段解码、整段拷进 session。改后 client 的 adapter 按请求缓存已算过的哈希，每步只补算新块，计算规则与 server 的 <code>TokenHasher</code> 逐字节相同（已测）；ATOM 的 load/save 两端都按 256 对齐、总是接在已有前缀后面，所以一段范围完全可以用这几块的哈希描述。</p>
+
+<h3>图解 ②-2：一轮对话里每个 RPC 带了什么，原版 vs 改后（client 哈希）</h3>
+<div class="card" style="padding:8px 10px"><svg viewBox="0 0 1000 462" role="img" aria-label="一轮对话里每个 RPC 带的内容，原版与改后对比" class="chart dg"><text x="313.8" y="14" class="dg-wl" text-anchor="middle">已在 GPU 前缀缓存</text><text x="313.8" y="28" class="tick" text-anchor="middle">392 块</text><path d="M177.0 42 V36 H450.7 V42" class="dg-br"/><text x="503.7" y="14" class="dg-wl" text-anchor="middle">LMCache 读回</text><text x="503.7" y="28" class="tick" text-anchor="middle">144 块</text><path d="M454.7 42 V36 H552.7 V42" class="dg-br"/><text x="556.7" y="14" class="dg-wl" text-anchor="start">新算、要存</text><text x="556.7" y="28" class="tick" text-anchor="start">64 块</text><path d="M556.7 42 V36 H598.0 V42" class="dg-br"/><text x="175" y="62" class="dg-wl">key 里带的内容（按 token 位置画）</text><text x="668" y="62" class="dg-wl">每个请求的大小（同一刻度）</text><text x="8" y="86" class="dg-rpc">lookup</text><text x="8" y="101" class="tick">scheduler 发 1 个</text><text x="167" y="86" class="dg-wl" text-anchor="end">原版</text><text x="167" y="101" class="dg-wl" text-anchor="end">改后</text><g><title>lookup 要判断整段 prompt 命中多少，确实要覆盖全部 600 块；原版发的是 token（每块约 712 B），改后发块哈希（每块 32 B）</title><rect x="175" y="76" width="425.0" height="11" rx="2" class="dg-stl"/><rect x="175.0" y="76" width="425.0" height="11" rx="2" class="dg-st"/><rect x="175.0" y="91" width="425.0" height="11" rx="2" class="dg-al"/></g><rect x="668" y="76" width="220.1" height="11" rx="2" class="dg-st"><title>原版：153,600 个 token，约 0.43 MB</title></rect><text x="894.1" y="86" class="tick">0.43 MB</text><rect x="668" y="91" width="9.9" height="11" rx="1" class="dg-al"><title>改后：600 个块哈希 × 32 B</title></rect><text x="683.9" y="101" class="tick">19.2 KB（600 个哈希）</text><text x="8" y="128" class="dg-rpc">free_lookup_locks</text><text x="8" y="143" class="tick">scheduler 发 1 个</text><text x="167" y="128" class="dg-wl" text-anchor="end">原版</text><text x="167" y="143" class="dg-wl" text-anchor="end">改后</text><g><title>释放 [0, 100,352) 的读锁（这段已在 GPU 前缀缓存里，不用读回）；原版 key 里带整段 prompt，改后只带这 392 块的哈希</title><rect x="175" y="118" width="425.0" height="11" rx="2" class="dg-stl"/><rect x="175.0" y="118" width="277.7" height="11" rx="2" class="dg-st"/><rect x="175.0" y="133" width="277.7" height="11" rx="2" class="dg-al"/></g><rect x="668" y="118" width="220.1" height="11" rx="2" class="dg-st"><title>原版：153,600 个 token，约 0.43 MB</title></rect><text x="894.1" y="128" class="tick">0.43 MB</text><rect x="668" y="133" width="6.5" height="11" rx="1" class="dg-al"><title>改后：392 个块哈希 × 32 B</title></rect><text x="680.5" y="143" class="tick">12.5 KB（392 个哈希）</text><text x="8" y="170" class="dg-rpc">retrieve</text><text x="8" y="185" class="tick">4 个 rank 各发 1 个</text><text x="167" y="170" class="dg-wl" text-anchor="end">原版</text><text x="167" y="185" class="dg-wl" text-anchor="end">改后</text><g><title>读回 [100,352, 137,216)；原版用 token_ids[:transfer_end] 构造，带 [0, 137,216)；改后只带这 144 块的哈希</title><rect x="175" y="160" width="379.7" height="11" rx="2" class="dg-stl"/><rect x="452.7" y="160" width="102.0" height="11" rx="2" class="dg-st"/><rect x="452.7" y="175" width="102.0" height="11" rx="2" class="dg-al"/></g><rect x="668" y="160" width="196.7" height="11" rx="2" class="dg-st"><title>原版：137,216 个 token，约 0.38 MB</title></rect><text x="870.7" y="170" class="tick">0.38 MB × 4</text><rect x="668" y="175" width="2.4" height="11" rx="1" class="dg-al"><title>改后：144 个块哈希 × 32 B</title></rect><text x="676.4" y="185" class="tick">4.6 KB × 4（144 个哈希）</text><text x="8" y="212" class="dg-rpc">store</text><text x="8" y="227" class="tick">4 个 rank 各发 1 个</text><text x="167" y="212" class="dg-wl" text-anchor="end">原版</text><text x="167" y="227" class="dg-wl" text-anchor="end">改后</text><g><title>存新算的 [137,216, 153,600)；原版用 token_ids[:aligned] 构造，带 [0, 153,600)；改后只带这 64 块的哈希</title><rect x="175" y="202" width="425.0" height="11" rx="2" class="dg-stl"/><rect x="554.7" y="202" width="45.3" height="11" rx="2" class="dg-st"/><rect x="554.7" y="217" width="45.3" height="11" rx="2" class="dg-al"/></g><rect x="668" y="202" width="220.1" height="11" rx="2" class="dg-st"><title>原版：153,600 个 token，约 0.43 MB</title></rect><text x="894.1" y="212" class="tick">0.43 MB × 4</text><rect x="668" y="217" width="1.5" height="11" rx="1" class="dg-al"><title>改后：64 个块哈希 × 32 B</title></rect><text x="675.5" y="227" class="tick">2.0 KB × 4（64 个哈希）</text><text x="8" y="254" class="dg-rpc">end_session</text><text x="175" y="254" class="dg-wl">只带 request_id，改前改后一样</text><line x1="452.7" y1="36" x2="452.7" y2="268" class="dg-guide"/><line x1="554.7" y1="36" x2="554.7" y2="268" class="dg-guide"/><line x1="600.0" y1="36" x2="600.0" y2="268" class="dg-guide"/><line x1="175" y1="268" x2="600" y2="268" class="dg-axis"/><text x="175.0" y="282" class="tick" text-anchor="start">0</text><text x="452.7" y="282" class="tick" text-anchor="middle">100,352</text><text x="554.7" y="282" class="tick" text-anchor="end">137,216</text><text x="604.0" y="282" class="tick" text-anchor="start">153,600</text><text x="8" y="308" class="dg-h">这一轮 10 个 RPC 合计：原版带 1,470,464 个 token，约 4.1 MB；改后带 1,824 个块哈希，约 58 KB，是原来的 1/70</text><line x1="8" y1="330" x2="992" y2="330" class="grid"/><text x="8" y="350" class="dg-h">server 处理这一轮要做的工作</text><text x="300" y="350" class="tick">0</text><text x="760" y="350" class="tick" text-anchor="end">25 ms</text><text x="8" y="372" class="dg-wl">解码请求</text><text x="8" y="387" class="tick">ZMQ 线程，持有 GIL</text><text x="292" y="372" class="dg-wl" text-anchor="end">原版</text><text x="292" y="387" class="dg-wl" text-anchor="end">改后</text><g><title>原版按实测每 153,600 个 token 解码 2.2–2.5 ms 折算；改后实测每个带哈希的 key 解码 0.7–0.8 µs</title><rect x="300" y="362" width="414.0" height="11" rx="2" class="dg-st"/><rect x="300" y="377" width="1.5" height="11" rx="1" class="dg-al"/></g><text x="720.0" y="372" class="tick">22 ms</text><text x="307.5" y="387" class="tick">约 0.01 ms（每个 key 约 0.8 µs）</text><text x="8" y="414" class="dg-wl">用 token 算块哈希</text><text x="8" y="429" class="tick">lookup 线程、store/retrieve 线程</text><text x="292" y="414" class="dg-wl" text-anchor="end">原版</text><text x="292" y="429" class="dg-wl" text-anchor="end">改后</text><g><title>lookup 600 块 + free_lookup_locks 392 块 + 第一个到达的 retrieve 536 块 + 第一个 store 64 块（同一请求的 4 个 rank 共用 session，后到的复用）；块数按代码推算，每块按实测 4.4 µs</title><rect x="300" y="404" width="128.9" height="11" rx="2" class="dg-st"/><rect x="300" y="419" width="1.5" height="11" rx="1" class="dg-al"/></g><text x="434.9" y="414" class="tick">约 7 ms（1,592 块）</text><text x="307.5" y="429" class="tick">0（直接用 client 发来的哈希）</text><text x="8" y="450" class="dg-wl">哈希挪到了 client：scheduler 和 4 个 rank 各算各的（新请求 15 万 token 约 2–5 ms），5 个进程并行，不占 server 的 GIL；代价见下文「改法要点和代价」。</text></svg></div>
+<div class="legend">
+      <span><i style="background:var(--stock);opacity:.25"></i>原版：带着、但这个 RPC 用不上的前缀（token）</span>
+      <span><i style="background:var(--stock)"></i>原版：这个 RPC 真正要处理的范围（token）</span>
+      <span><i style="background:var(--all)"></i>改后：只带这段范围的块哈希（每块 32 B）</span>
+    </div>
+<p class="sub">示例：多轮对话中的一轮，prompt 共 153,600 token（600 块，每块 256 token）。前 100,352 个 token 还在 GPU 前缀缓存里，LMCache 命中到 137,216，最后 16,384 个是新 token，一步 prefill 完。每个 RPC 带哪段 token 取自 ATOM 代码：lookup 和 free_lookup_locks 带整段 prompt（<code>_lookup_token_ids()</code>），retrieve 带 <code>token_ids[:transfer_end]</code>，store 带 <code>token_ids[:aligned]</code>，end_session 只带 request_id；retrieve 和 store 由 4 个 rank 各发一次。字节数是用本次压测的真实 prompt 实测的：aiperf 生成的数据集经 M3 的 chat template 分词后，msgpack 平均每个 token 占 2.78 B（8% 的 id ≥ 65,536，要 5 B）；153,600 个 token 解码实测 2.2–2.5 ms，图中按 2.35 ms 折算。改后每个块哈希 32 B，带哈希的 key 实测解码 0.7–0.8 µs（<code>mm3/micro_hashkey.py</code>）。原版 server 算哈希的块数按代码推算：lookup 用 <code>compute_chunk_hashes</code> 从头算整段，free_lookup_locks 也要从第 0 块算到 end，retrieve 和 store 走 session 增量计算、4 个 rank 共用同一个 session。鼠标悬停每一行可看说明。</p>
+
+<h3>改法要点和代价</h3>
+<ul>
+<li>ATOM 侧 adapter 用和 server <code>TokenHasher</code> 完全相同的规则（blake3，256 token 一块）按请求增量算哈希，逐字节一致（已测）；ATOM 的 load/save 两端都按 256 对齐，一段范围完全可以用这几块的哈希描述。</li>
+<li>server 不再解码、拷贝和哈希 token。真实服务里 lookup 执行 51.4 → 23.7 ms，ZMQ 接收线程持有 GIL 的采样 683 → 18。</li>
+<li><b>代价挪到了 client</b>：新请求第一次操作要在调用线程上把整段 prompt 哈希一遍（128k 约 4.7 ms），之后每增加 16k 约 0.2 ms。更好的做法是 scheduler 做 lookup 时算一次再下发给各 worker。</li>
+<li>client 和 server 的哈希规则绑在了一起；server 端会检查算法，不一致就拒绝。</li>
+</ul>
+
+<h2>5. 优化 3：批量构造 ObjectKey</h2>
+<p>TP4 下对一个 153,600 token（600 块）的 prompt 做 lookup，要构造 <b>2,400 个 ObjectKey</b>（600 块 × 4 个 rank）。每个都走 frozen dataclass 的 <code>__init__</code>，再用 <code>__post_init__</code> 校验 model name 有没有 <code>@</code>、group 是否小于 0、salt 有没有禁用字符和是否超长——<b>2,400 次校验的都是同一个 model name 和同一个 salt</b>。free_lookup_locks 和 end_session 还要再来一遍。</p>
+<div class="grid2">
+  <div class="card"><b>构造 2,400 个 ObjectKey 的耗时（ms）</b><svg id="key" class="chart" viewBox="0 0 500 140" role="img" aria-label="ObjectKey 构造耗时"></svg></div>
+  <div class="card"><b>改法</b>
+    <ul>
+      <li>同一次调用共享的字段（model name、group、salt）<b>只校验一次</b>，然后批量填字段，不再逐个走 dataclass 构造函数。</li>
+      <li>批量构造出来的 key 与 dataclass 构造的相等，哈希值也相同（单元测试）。</li>
+      <li>单项收益不大（lookup 执行约 −7%），但它和第 2 项一起，把 lookup / free_lookup_locks / end_session 的 CPU 时间压下来。</li>
+    </ul>
+  </div>
+</div>
+
+<h2>6. 优化 4：<code>--max-gpu-workers 4</code></h2>
+<h3>6.1 问题：4 个 rank 排成一队</h3>
+<p>LMCache server 用 <code>--max-gpu-workers</code> 个线程处理 store/retrieve，<b>默认 1</b>。每个 rank 第一次来时分到一个线程，以后它的请求都交给这个线程按顺序处理。ATOM TP4 有 4 个 rank，线程只有 1 个，全挤在一起。server 日志里有现成的警告：</p>
+<pre>LMCache WARNING: AffinityThreadPool: affinity_key=... wrapped onto worker slot 0 (only 1 workers),
+    so it shares a thread with an earlier key and their tasks are serialized.</pre>
+<p>真实服务的 server trace 里，retrieve 在 server 上<b>排队</b>中位数 0.65–0.86 s，真正<b>执行</b>只要 18 ms。</p>
+<h3>6.2 改法，以及为什么要和事件池一起用</h3>
+<ul>
+<li>线程数设成 rank 数（TP4 就是 4），每个 rank 一个线程，4 张卡的请求并行处理。同一个 rank 的请求仍是一个接一个，再多开用不上；多个 ATOM 实例共用一个 server 时按 client 总数来设。</li>
+<li>只开 4 个线程，每个线程还是“办一件、等一会儿”（卡在销毁上）；加上事件池，办完马上接下一个。下图：4 个线程都开着，看<b>同一个 rank 连续来 3 个请求</b>：</li>
+</ul>
+<div class="legend">
+  <span><i style="background:var(--cpu)"></i>线程处理请求（约 3 ms）</span>
+  <span><i style="background:var(--bad)"></i>线程卡在销毁 event，等这张卡拷完</span>
+  <span><i style="background:var(--gpu)"></i>GPU 拷贝（约 20 ms）</span>
+  <span><i style="background:var(--s2)"></i>ATOM 收到“拷完了”的通知</span>
+</div>
+<div class="card" style="padding:8px 10px"><svg id="cmp4" class="chart" viewBox="0 0 1000 260" role="img" aria-label="4 个线程时不加与加事件池"></svg></div>
+
+<h2>7. 配套修复：和 mono 一起用时避免 GPU 卡死</h2>
+<div class="card" style="border-left:4px solid var(--bad)">
+<p><b>一句话</b>：ROCm 7.2 上，server 在 GPU 上等 ATOM 的 IPC event（①），实际是启动一个只有 1 个线程的<b>轮询 kernel</b>。ATOM 的 mono kernel 要求 256 个 CTA <b>同时驻留</b>（每个 CU 一个）并互相自旋等待。轮询 kernel 一旦先占住某个 CU 的槽位，mono 的那个 CTA 就进不去；而轮询 kernel 等的信号要等 mono 跑完才会写——<b>两边互相等，GPU 卡死</b>。修复：<b>不在 GPU 上等一个还没完成的 event</b>。</p>
+</div>
+<h3>7.1 为什么会卡死</h3>
+<ul>
+<li>7.2 的 IPC event 是一块共享内存里的信号槽。server 调 <code>stream.wait_event</code> → <code>ROCCLR_COMMAND_STREAM_WAIT_VALUE</code>；rocclr 默认（<code>GPU_STREAMOPS_CP_WAIT=false</code>）用一个 <b>1 个 work-item 的 blit kernel <code>streamOpsWait</code></b> 反复读这块内存，直到值变成 0。</li>
+<li>ATOM mono（<code>ATOM_MONO_ENABLE</code> 默认开；DSV4、GLM-5.2、MiniMax-M3 都有）：<code>mono/config.py</code> 写明 “one CTA per CU, all co-resident”，CTA 之间自旋等待，靠的就是全部同时在 GPU 上。</li>
+<li>server 和 ATOM 跑在<b>同一张卡</b>上。ATOM 发请求时往往还没等 ① 完成；如果 server 的轮询 kernel 先上了 GPU、占了某个 CU 的槽位，随后派发的 mono 就有一个 CTA 进不去。</li>
+</ul>
+<div class="legend">
+  <span><i style="background:var(--s1)"></i>mono 的 CTA（每个 CU 一个，互相自旋等待）</span>
+  <span><i style="background:var(--bad)"></i>server 的轮询 kernel（等 ①）</span>
+  <span><i style="background:transparent;border:1px dashed var(--muted)"></i>进不去 / 在等</span>
+  <span><i style="background:var(--gpu)"></i>server 拷贝</span>
+  <span><i style="background:var(--cpu)"></i>server CPU 处理</span>
+</div>
+<div class="card" style="padding:8px 10px"><svg id="mono" class="chart" viewBox="0 0 1000 520" role="img" aria-label="mono 与轮询 kernel 卡死，以及修复后"></svg></div>
+
+<h3>7.2 修复：两层，都默认关</h3>
+<table>
+<tr><th>开关</th><th>位置</th><th>做什么</th></tr>
+<tr><td><code>LMCACHE_MP_SUBMIT_AFTER_PRODUCER=1</code></td><td>client（ATOM adapter）</td><td>store/retrieve 交给后台线程，在 CPU 上轮询 ① 完成（<code>query()</code> 只读主机内存）后再发送；<code>submit</code> 立即返回一个 future，发送前报告未完成。ATOM 的调用线程不阻塞。</td></tr>
+<tr><td><code>LMCACHE_MP_HOST_WAIT_PRODUCER=1</code></td><td>server</td><td>先在 CPU 上查 ①：已完成就不排 GPU 等待；未完成（老 client 提前发了）就在 CPU 上轮询，<b>不再往 GPU 上排轮询 kernel</b>。</td></tr>
+</table>
+<ul>
+<li>剩下的 server kernel（拷贝、记录 ② 的写信号 kernel）都不依赖 mono，能自己跑完，最多让 mono 晚开始一点，不会循环等待；ATOM 对 ② 只在 CPU 上 <code>query()</code>。</li>
+<li>正确性：7.2 写信号前有一个 release barrier，CPU 看到 ① 完成时，ATOM 写的 KV 已经可见，再排拷贝顺序成立。</li>
+<li>根治要等 ROCm：develop 已合入 <a href="https://github.com/ROCm/rocm-systems/pull/5575">#5575</a>，改用由 CP 等待的 ROCr IPC 信号，不再有轮询 kernel；还没进 7.2。</li>
+</ul>
+
+<h3>7.3 验证</h3>
+<p class="sub">最小复现 <code>benchmarks/mp_event_pool/mono_hang_repro.py</code>：单张 MI355X、ROCm 7.2.4，两个进程；“引擎”每轮让 stream 忙一会儿、排一个所有 CTA 必须同时驻留并全局屏障的持久 kernel、record ① 并立刻发 handle；“server”按三种方式在 ① 之后排拷贝。</p>
+<table>
+<tr><th>持久 kernel 占满</th><th class="num">原版：server 在 GPU 上等</th><th class="num">server 在 CPU 上等</th><th class="num">client 等完成再发</th></tr>
+<tr><td>每个 CU（每 CU 2 个 1024 线程的 CTA，wave 槽位全满）</td><td class="num"><b>第 2 轮卡死</b>（2 次都是）</td><td class="num">100 轮正常</td><td class="num">100 轮正常</td></tr>
+<tr><td>每个 CU 一半（每 CU 1 个 CTA）</td><td class="num">100 轮正常</td><td class="num">–</td><td class="num">–</td></tr>
+</table>
+<p class="sub">性能（srvbench，事件池 + 4 个线程，各 2 轮，L1 不扩容，0 次失败）：</p>
+<table>
+<tr><th></th><th class="num">不开修复</th><th class="num">开两层修复</th></tr>
+<tr><td>单条会话 store / retrieve p50</td><td class="num">33 / 85 ms</td><td class="num">33 / 84 ms</td></tr>
+<tr><td>16 条 64k / 32 条 32k 同时到达，总耗时</td><td class="num">0.85 / 1.32 s</td><td class="num">0.90 / 1.20 s</td></tr>
+<tr><td>ATOM 调用线程上每次 store 提交耗时</td><td class="num">4.4 ms</td><td class="num"><b>0.75 ms</b>（发送挪到后台线程）</td></tr>
+</table>
+
+<h2>8. 效果</h2>
+<h3>8.1 真实服务：前三项（事件池 + token hash + 批量 key）</h3>
+<p class="sub">10-15/16，MI355X GPU 0–3，rocm/atom-dev nightly 2026-10-14（ATOM 6e9b3e1c5，ROCm 7.2.4，LMCache f22dec28），MiniMax-M3-MXFP4 TP4 + EAGLE3，aiperf agentx 并发 48、1200 s；server <code>--max-gpu-workers 1</code>、<code>--eviction-ratio 0.01</code>。原版 3 次，三项全开 3 次。</p>
+<div class="legend"><span><i style="background:var(--s2)"></i>原版</span><span><i style="background:var(--s1)"></i>三项全开</span></div>
+<div class="card"><b>server 侧与读回延迟（ms，越低越好）</b><svg id="e2e" class="chart" viewBox="0 0 1000 300" role="img" aria-label="真实服务 server 指标"></svg></div>
+<table>
+<tr><th></th><th class="num">原版</th><th class="num">三项全开</th><th class="num">变化</th></tr>
+<tr><td>TTFT p90</td><td class="num">1,911 (1,875–1,946) ms</td><td class="num"><b>1,525</b> (1,475–1,579) ms</td><td class="num">−20 %</td></tr>
+<tr><td>TTFT 均值</td><td class="num">1,071 ms</td><td class="num"><b>997</b> ms</td><td class="num">−7 %（范围重叠）</td></tr>
+<tr><td>从 LMCache 读回 KV，p50 / p99</td><td class="num">855 ms / 9.7 s</td><td class="num"><b>215 ms / 2.8 s</b></td><td class="num">−75 % / −71 %</td></tr>
+<tr><td>读回超过 1 s 的次数（每次运行）</td><td class="num">67</td><td class="num"><b>19</b></td><td class="num">−72 %</td></tr>
+<tr><td>server store 执行均值 / 排队均值</td><td class="num">30.7 / 290 ms</td><td class="num"><b>3.0 / 8.6</b> ms</td><td class="num">−90 % / −97 %</td></tr>
+<tr><td>server retrieve 排队 p50 / 执行均值</td><td class="num">360 / 119 ms</td><td class="num"><b>16 / 18</b> ms</td><td class="num">−96 % / −85 %</td></tr>
+<tr><td>server lookup 执行均值</td><td class="num">51.4 ms</td><td class="num"><b>20.9</b> ms</td><td class="num">−59 %</td></tr>
+<tr><td>store/retrieve 线程忙碌</td><td class="num">45 %</td><td class="num"><b>4.6 %</b></td><td class="num"></td></tr>
+<tr><td>60 s 内持有 GIL 的采样数</td><td class="num">2,746</td><td class="num"><b>671</b></td><td class="num">−76 %</td></tr>
+<tr><td>端到端时延均值 / 输出 token/s</td><td class="num">10.4 s / 1,505</td><td class="num">10.3 s / 1,507</td><td class="num">持平</td></tr>
+</table>
+
+<h3>8.2 server 单独压测：四项逐项与全开</h3>
+<p>同一个 server，不跑模型，直接用 ATOM 自己的 LMCache adapter 类驱动：4 个 worker 进程分别在 4 张 GPU 上注册 MiniMax-M3 形状的 page view（301 个张量，每 rank 每 token 23,400 字节），第 5 个进程扮演 ATOM 的 scheduler。对话的每一轮依次是：lookup → 每个 rank 读回前缀 → 每个 rank 存入新增的 16k token（key 里带完整 prompt）→ end_session。L1 800 GB 启动时就全部锁好、运行中不扩容，写入总量 684 GB，全程 0 次淘汰。</p>
+<p class="sub">11-01，一台 8×MI355X 节点的 GPU 4–7，镜像 rocm/atom-dev（10-28 构建，ROCm 7.2.4），LMCache f22dec28（ATOM 镜像自带）+ PR #2；四项只有在这个基线上能全部打开。每组 2 轮交替运行。sweep：单个会话，prompt 从 16k 以 16k 为步长增长到 524,288 token，顺序执行；共跑两遍（每遍 token 都是新的），只统计第二遍，每个点是两轮的均值。为了图清楚，只开「批量构造 key」这一组没画进图，六组的数据都在表里。鼠标悬停可看具体数值。</p>
+<div class="legend">
+  <span><i style="background:var(--s2)"></i>原版</span><span><i style="background:var(--s1)"></i>只开事件池</span><span><i style="background:var(--s3)"></i>只开 client 哈希</span><span><i style="background:var(--s4)"></i>三项全开</span><span><i style="background:var(--s5)"></i>四项全开（三项 + 4 个线程）</span>
+</div>
+<div class="card"><b>retrieve 时延，4 个 rank 全部完成（ms）</b><svg id="lr" class="chart" viewBox="0 0 1000 320" role="img" aria-label="retrieve 时延随 prompt 长度"></svg><p class="sub">横轴：prompt token 数（retrieve 覆盖除最后 16k 外的全部前缀）。</p></div>
+<div class="card"><b>store 时延，新增 16k token，4 个 rank 全部完成（ms）</b><svg id="ls" class="chart" viewBox="0 0 1000 320" role="img" aria-label="store 时延随 prompt 长度"></svg><p class="sub">横轴：key 里携带的 prompt token 数。</p></div>
+<div class="card"><b>一整轮：lookup + retrieve + store（ms）</b><svg id="lt" class="chart" viewBox="0 0 1000 320" role="img" aria-label="一整轮时延随 prompt 长度"></svg><p class="sub">横轴：prompt token 数。</p></div>
+<p><b>全部指标</b>（2 轮均值，括号里是两轮的范围）：</p>
+<table>
+<tr><th></th><th class="num">原版</th><th class="num">只开事件池</th><th class="num">只开 client 哈希</th><th class="num">只开批量 key</th><th class="num">三项全开</th><th class="num">四项全开</th></tr>
+<tr><td>单条会话 store p50（ms）</td><td class="num">97 (96–99)</td><td class="num">69 (69–69)</td><td class="num">63 (63–64)</td><td class="num">99 (95–103)</td><td class="num">32 (32–32)</td><td class="num"><b>38 (37–39)</b></td></tr>
+<tr><td>单条会话 retrieve p50（ms）</td><td class="num">614 (613–615)</td><td class="num">235 (234–236)</td><td class="num">574 (572–576)</td><td class="num">617 (616–619)</td><td class="num">196 (195–197)</td><td class="num"><b>159 (158–160)</b></td></tr>
+<tr><td>单条会话 lookup p50（ms）</td><td class="num">30.4 (29.8–31.0)</td><td class="num">32.2 (30.0–34.3)</td><td class="num">17.4 (17.1–17.6)</td><td class="num">34.0 (34.0–34.1)</td><td class="num">16.7 (16.6–16.9)</td><td class="num"><b>15.6 (15.3–15.9)</b></td></tr>
+<tr><td>16 条 64k 同时到达，总耗时（s）</td><td class="num">3.21 (3.20–3.23)</td><td class="num">1.31 (1.21–1.41)</td><td class="num">3.15 (3.11–3.18)</td><td class="num">3.29 (3.24–3.34)</td><td class="num">0.93 (0.81–1.04)</td><td class="num"><b>0.86 (0.83–0.89)</b></td></tr>
+<tr><td>32 条 32k 同时到达，总耗时（s）</td><td class="num">3.95 (3.92–3.97)</td><td class="num">1.75 (1.71–1.78)</td><td class="num">3.75 (3.71–3.78)</td><td class="num">4.11 (4.01–4.20)</td><td class="num">1.37 (1.36–1.37)</td><td class="num"><b>1.11 (1.09–1.13)</b></td></tr>
+<tr><td>多会话 store p50 / p90（ms）</td><td class="num">1652 / 1901</td><td class="num">562 / 887</td><td class="num">1464 / 1791</td><td class="num">1722 / 2168</td><td class="num">388 / 549</td><td class="num"><b>341 / 542</b></td></tr>
+<tr><td>多会话 retrieve p50 / p90（ms）</td><td class="num">912 / 1534</td><td class="num">303 / 448</td><td class="num">1194 / 1704</td><td class="num">913 / 1569</td><td class="num">202 / 337</td><td class="num"><b>155 / 328</b></td></tr>
+<tr><td>失败操作 / burst 命中次数（每轮 144）</td><td class="num">0 / 144、144</td><td class="num">0 / 144、144</td><td class="num">0 / 144、144</td><td class="num">0 / 144、144</td><td class="num">0 / 144、144</td><td class="num">0 / 144、144</td></tr>
+</table>
+<ul>
+<li><b>事件池是单项收益最大的</b>：retrieve 随 prompt 增长的斜率大幅下降，多会话总耗时降到原来的 40 % 左右。</li>
+<li><b>client 哈希主要省 store 和 lookup</b>：store 不再随 prompt 变长而变慢，lookup p50 30 → 17 ms；对 retrieve 帮助不大，因为 retrieve 的大头是拷贝和销毁等待。</li>
+<li><b>批量构造 key 单独开看不出差别</b>（在测量噪声内），它的作用是和第 2 项一起把 lookup / end_session 的 CPU 时间压下来。</li>
+<li><b>四项全开 vs 三项全开</b>：retrieve（196 → 159 ms）和多会话（0.93/1.37 → 0.86/1.11 s）更好；单条会话 store 略慢（32 → 38 ms，两轮都是），绝对值很小。</li>
+</ul>
+<p class="note">这组数据跑在 L1 运行中不扩容的配置下。前几天的几次压测（L1 运行中扩容）受扩容锁内存的卡顿干扰，数字偏高，已不再引用。</p>
+
+<h2>9. 怎么用</h2>
+<pre># ATOM（LMCache client）侧
+export LMCACHE_MP_POOLED_EVENTS=1   # 优化 1：事件池
+export LMCACHE_MP_CLIENT_HASH=1     # 优化 2：client 算块哈希（需 blake3 server）
+
+# LMCache server 侧
+export LMCACHE_MP_FAST_KEYS=1       # 优化 3：批量构造 ObjectKey
+lmcache server ... --max-gpu-workers 4   # 优化 4：每个 rank 一个线程（TP4 → 4）
+
+# 配套修复：和 mono 一起用时必须开（避免 GPU 卡死）
+export LMCACHE_MP_SUBMIT_AFTER_PRODUCER=1   # client：① 完成后再发送
+export LMCACHE_MP_HOST_WAIT_PRODUCER=1      # server：不在 GPU 上等未完成的 ①</pre>
+<ul>
+<li>前三项默认都关，需要显式开启；新字段都有默认值，新老 client / server 互相兼容。</li>
+<li>代码：三项都在 <a href="https://github.com/yhl-amd/LMCache/pull/2">#2</a>（f22dec28）；事件池已移植到 dev：<a href="https://github.com/yhl-amd/LMCache/pull/3">#3</a>。</li>
+<li><b>L1 要留余量</b>：处理变快后同时在途的写入更多，L1 默认边用边扩（lazy），扩容跟不上会提前触发淘汰；可用 <code>--l1-init-size-gb</code> 让启动时先扩出足够容量。</li>
+</ul>
+
+<h2>10. 注意事项</h2>
+<ul>
+<li><b>和 mono 一起用必须开配套修复</b>（第 7 节）：否则 ROCm 7.2 上 server 的轮询 kernel 可能和 mono 互相等，GPU 卡死。</li>
+<li><b>L1 扩容会挡住 HIP 调用</b>：L1 默认边用边扩，每次用 <code>hipHostRegister</code> 锁 10 GB，锁的几秒里 server 的 IPC event record、注册时打开显存句柄都会被挡住，表现为约 10 s 的卡顿、注册超时、实例被 server 回收（<code>Reaped GPU instance</code>）。线上要么用 <code>--l1-init-size-gb</code> 一开始就扩够，要么接受偶发卡顿。</li>
+<li><b>心跳 / 注册卡住</b>：ATOM 文档目前要求不要多开 GPU worker（多线程懒初始化曾把 server 卡到超过心跳）。压测里注册卡住在 1 个和 4 个线程时都出现过，触发条件没查清；上线前看 server 日志有没有 <code>Reaped GPU instance</code>、注册超时。</li>
+<li><b>事件池只针对 ROCm</b>：CUDA 上销毁 event 不同步，收益小很多；ROCm 7.2 的 backport（#11529）合入后，销毁阻塞本身会消失。</li>
+<li><b>token hash 把哈希开销挪到了 client 调用线程</b>（新请求 128k 约 4.7 ms）；最好由 scheduler 算一次再下发。</li>
+<li>真实服务的 TTFT 均值、p99 波动大，单项端到端数字只作参考；server 侧指标的倍数大、重复性好。</li>
+</ul>
+
+<h2>11. 复现</h2>
+<p>脚本都在 <a href="https://github.com/yhl-amd/LMCache/pull/3">#3</a> 的 <code>benchmarks/mp_event_pool/</code>。一台 4 卡 MI300/MI350 级机器、ROCm 7.2.x 即可；单卡和两进程的测试只需要 torch。</p>
+<table>
+<tr><th>要验证什么</th><th>脚本</th><th>条件 / 参数</th><th>我们的结果</th></tr>
+<tr><td>销毁 IPC event 会阻塞，并挡住别的线程新建 event</td><td><code>destroy_probe.py</code></td><td>单卡；GPU 忙 <code>--busy-ms</code>（40）；后台线程 / 同一线程销毁；普通 event 对照；可选导入方进程 <code>--consumer 1</code></td><td>GPU 忙 40 ms 时销毁 40.8 ms；期间新建 IPC event 43 µs → 38.6 ms</td></tr>
+<tr><td>销毁导入的 event 的耗时随 GPU 忙碌程度变化</td><td><code>event_reuse_check.py</code></td><td>两进程一张卡；GPU 空闲 / 本进程忙 50 ms</td><td>1.3 ms / 50.9 ms</td></tr>
+<tr><td>event 复用安全（不提前放行、不误报）</td><td><code>event_reuse_check.py 400 31</code></td><td>两进程；每 31 次换新 / 一直复用只 query</td><td>400 轮 0 次出错</td></tr>
+<tr><td>ROCm 7.2 的 32 次 record 限制（负对照）</td><td><code>event_reuse_check.py 60 40</code></td><td>每个 event 记 40 次</td><td>第 33 次 wait 报 <code>hipErrorInvalidValue</code></td></tr>
+<tr><td>持久 kernel（mono）+ GPU 侧等待会卡死，两层修复能避免</td><td><code>mono_hang_repro.py</code></td><td><code>--mode stream|host|gate</code>；<code>--block</code>、<code>--blocks-per-cu</code> 控制每个 CU 占满还是留余量</td><td>占满 + stream：第 2 轮卡死；host / gate：100 轮正常；留余量：不卡</td></tr>
+<tr><td>四项逐项与全开的 server 性能</td><td><code>run_srvbench.sh</code> + <code>srvbench.py</code> + <code>aggregate.py</code> + <code>sweep_curves.py</code></td><td>sweep 长度 <code>SB_T_SWEEP</code>（32 → 512k）；同时到达 <code>SB_BURSTS</code>（16×64k、32×32k）× <code>SB_BURST_R</code>；L1 <code>SB_L1</code> = <code>SB_L1_INIT</code>（不扩容）；开关见下；详细步骤见 11.1</td><td>第 8.2 节</td></tr>
+</table>
+<pre># 单卡 / 两进程（只要 torch）
+python destroy_probe.py --trials 30 --busy-ms 40 --consumer 1
+python event_reuse_check.py 400 31
+python event_reuse_check.py 60 40
+python mono_hang_repro.py --mode stream --block 1024                    # 预期卡死
+python mono_hang_repro.py --mode host   --block 1024                    # 预期正常
+python mono_hang_repro.py --mode stream --block 1024 --blocks-per-cu 1  # 留余量，预期正常
+
+# server 压测：LMCache f22dec28（ATOM 镜像自带）上叠 PR #2，装到 /w/site-pool-f22
+export HIP_VISIBLE_DEVICES=4,5,6,7 SB_T_SWEEP=32 SB_BURSTS=16x65536,32x32768 SB_BURST_R=3 SB_L1=800 SB_L1_INIT=800
+P=/w/site-pool-f22
+bash run_srvbench.sh runs/stock@r1 0                                                  # 原版
+PYTHONPATH=$P bash run_srvbench.sh runs/pool@r1 1                                     # 只开事件池
+PYTHONPATH=$P LMCACHE_MP_CLIENT_HASH=1 bash run_srvbench.sh runs/hash@r1 0            # 只开 client 哈希
+PYTHONPATH=$P LMCACHE_MP_FAST_KEYS=1 bash run_srvbench.sh runs/fk@r1 0                # 只开批量 key
+PYTHONPATH=$P LMCACHE_MP_CLIENT_HASH=1 LMCACHE_MP_FAST_KEYS=1 bash run_srvbench.sh runs/all3@r1 1                     # 三项全开
+PYTHONPATH=$P LMCACHE_MP_CLIENT_HASH=1 LMCACHE_MP_FAST_KEYS=1 bash run_srvbench.sh runs/all4@r1 1 --max-gpu-workers 4 # 四项全开
+python aggregate.py runs stock pool hash fk all3 all4      # 汇总表（第 8.2 节）
+python sweep_curves.py runs stock pool hash fk all3 all4   # sweep 曲线（第 8.2 节三张图）</pre>
+<h3>11.1 sweep 详细复现步骤</h3>
+<ol>
+<li><b>环境</b>：一台 4 卡 MI300/MI350 级机器；镜像 <code>rocm/atom-dev</code>（我们用 10-28 构建的 latest，ROCm 7.2.4、torch 2.10，自带 LMCache f22dec28）。
+<pre>docker run -d --init --name lmc_sweep --network host --ipc host --device /dev/kfd --device /dev/dri \
+  --group-add video --security-opt seccomp=unconfined -e HIP_VISIBLE_DEVICES=4,5,6,7 \
+  -v /path/to/work:/w rocm/atom-dev:latest sleep infinity
+docker exec -it lmc_sweep bash</pre></li>
+<li><b>准备两份 LMCache</b>：原版直接用镜像自带的；补丁版 = 拷一份镜像自带的，再覆盖 PR #2 改过的 9 个 Python 文件（C++ 扩展不变）。
+<pre>git clone https://github.com/yhl-amd/LMCache.git /w/LMCache &amp;&amp; cd /w/LMCache
+git checkout perf/mp-pooled-events
+mkdir -p /w/site-pool-f22 &amp;&amp; cp -a /opt/venv/lib/python3.12/site-packages/lmcache /w/site-pool-f22/
+git diff --name-only f22dec2832124ea4ffeb464553b819a6369d4a30 HEAD -- lmcache | xargs -I{} cp --parents {} /w/site-pool-f22/
+PYTHONPATH=/w/site-pool-f22 python -c "import lmcache.integration.atom.multi_process_adapter as m; print(m._POOLED_EVENTS)"   # False = 开关默认关</pre></li>
+<li><b>sweep 每一轮做什么</b>（<code>srvbench.py ... sweep</code>）：起 4 个 rank 进程（每张卡注册 MiniMax-M3 形状的 page view）和 1 个 scheduler 进程，只用一个会话；第 t 轮 prompt 长度 P = t × 16k：lookup(P) → 4 个 rank 各自 retrieve [0, P − 16k) → 4 个 rank 各自 store 新增的 [P − 16k, P) → end_session。<code>SB_T_SWEEP=32</code> 时 P 从 16k 到 524,288。整套跑两遍（pass0 预热、pass1 测量），每遍用新的随机 token，只统计 pass1。</li>
+<li><b>运行</b>：6 组按上面的命令交替各跑 2 轮（每组约 5 分钟，含启动时锁 800 GB L1 约 2 分钟），sweep 之后脚本接着跑同时到达的 burst。</li>
+<li><b>检查这一轮有没有被干扰</b>：<code>server.log</code> 里 0 条 <code>triggering eviction</code>、0 条 <code>Expanded</code>（L1 没扩容）、0 条 <code>Reaped GPU instance</code>；<code>summary.json</code> 里 burst retrieve 次数 = 144、失败操作 = 0。有一项不满足就重跑这一轮。</li>
+<li><b>出曲线</b>：<code>sweep.json</code> 的每条记录是 <code>[kind, prompt_tokens, seconds, tag]</code>，kind 有 lookup / retrieve / store / turn（一整轮）以及 *_rank_max、*_submit。<code>sweep_curves.py</code> 取 pass1、按 prompt 长度对各轮求均值，输出 <code>sweep_curves.json</code> / <code>.csv</code>，第 8.2 节的三张图就是用它画的。
+<pre>python sweep_curves.py runs stock pool hash fk all3 all4 --kinds retrieve,store,turn</pre></li>
+</ol>
+<p><b>我们的实测值</b>（2 轮均值，可以拿来对照自己的结果）：</p>
+<div class="grid2">
+<table>
+<tr><th>retrieve（ms）</th><th class="num">64k</th><th class="num">128k</th><th class="num">256k</th><th class="num">512k</th></tr>
+<tr><td>原版</td><td class="num">124</td><td class="num">273</td><td class="num">579</td><td class="num">1179</td></tr>
+<tr><td>只开事件池</td><td class="num">46</td><td class="num">106</td><td class="num">224</td><td class="num">453</td></tr>
+<tr><td>只开 client 哈希</td><td class="num">117</td><td class="num">254</td><td class="num">535</td><td class="num">1104</td></tr>
+<tr><td>只开批量 key</td><td class="num">129</td><td class="num">277</td><td class="num">583</td><td class="num">1199</td></tr>
+<tr><td>三项全开</td><td class="num">39</td><td class="num">86</td><td class="num">183</td><td class="num">376</td></tr>
+<tr><td>四项全开</td><td class="num">33</td><td class="num">71</td><td class="num">150</td><td class="num">306</td></tr>
+</table>
+<table>
+<tr><th>store（ms）</th><th class="num">64k</th><th class="num">128k</th><th class="num">256k</th><th class="num">512k</th></tr>
+<tr><td>原版</td><td class="num">71</td><td class="num">78</td><td class="num">96</td><td class="num">130</td></tr>
+<tr><td>只开事件池</td><td class="num">38</td><td class="num">46</td><td class="num">67</td><td class="num">99</td></tr>
+<tr><td>只开 client 哈希</td><td class="num">62</td><td class="num">61</td><td class="num">64</td><td class="num">66</td></tr>
+<tr><td>只开批量 key</td><td class="num">70</td><td class="num">81</td><td class="num">96</td><td class="num">134</td></tr>
+<tr><td>三项全开</td><td class="num">29</td><td class="num">30</td><td class="num">32</td><td class="num">39</td></tr>
+<tr><td>四项全开</td><td class="num">24</td><td class="num">28</td><td class="num">35</td><td class="num">58</td></tr>
+</table>
+</div>
+<table>
+<tr><th>一整轮（ms）</th><th class="num">64k</th><th class="num">128k</th><th class="num">256k</th><th class="num">512k</th></tr>
+<tr><td>原版</td><td class="num">203</td><td class="num">366</td><td class="num">705</td><td class="num">1443</td></tr>
+<tr><td>只开事件池</td><td class="num">92</td><td class="num">169</td><td class="num">323</td><td class="num">694</td></tr>
+<tr><td>只开 client 哈希</td><td class="num">184</td><td class="num">324</td><td class="num">616</td><td class="num">1205</td></tr>
+<tr><td>只开批量 key</td><td class="num">207</td><td class="num">374</td><td class="num">712</td><td class="num">1624</td></tr>
+<tr><td>三项全开</td><td class="num">72</td><td class="num">124</td><td class="num">231</td><td class="num">446</td></tr>
+<tr><td>四项全开</td><td class="num">61</td><td class="num">107</td><td class="num">200</td><td class="num">393</td></tr>
+</table>
+
+<p class="note"><b>压测时注意</b>：① L1 要一开始就锁够、运行中不扩容（<code>SB_L1</code> = <code>SB_L1_INIT</code>，并大于总写入量），否则扩容锁内存时 server 会卡几秒，甚至注册超时被回收；② 检查每轮 <code>server.log</code> 里没有 <code>triggering eviction</code>、<code>Reaped GPU instance</code>，<code>summary.json</code> 里 burst retrieve 是 144 次；③ 宿主机上 5566、9090 端口可能被别的服务占，脚本默认用 15566、19788。</p>
+<p class="sub">前三项在真实服务上的逐项对比和原始开销分析见 <a href="../lmcache-mp-overheads/">LMCache MP 模式的 RPC 开销</a>。</p>
+</div>
+<div id="tip"></div>
+
+<script>
+const NS="http://www.w3.org/2000/svg", tip=document.getElementById("tip");
+function el(p,t,a,txt){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!==undefined)e.textContent=txt;p.appendChild(e);return e}
+function hover(e,html){e.addEventListener("mousemove",ev=>{tip.style.display="block";tip.innerHTML=html;tip.style.left=(ev.clientX+14)+"px";tip.style.top=(ev.clientY+12)+"px"});e.addEventListener("mouseleave",()=>tip.style.display="none")}
+
+// ---------- overview: original vs all four ----------
+(function(){
+  const s=document.getElementById("ovr"), L=160, R=980, X=t=>L+(R-L)*t/100, RH=19;
+  function lanes(y0,rows){const ry=i=>y0+24+i*(RH+3);rows.forEach((r,i)=>{el(s,"rect",{x:4,y:ry(i)-2,width:992,height:RH+2,rx:3,fill:"var(--rule2)"});el(s,"text",{x:12,y:ry(i)+RH/2+4,"font-size":12,fill:"var(--ink2)"},r)});return ry}
+  function box(ry,row,t0,t1,fill,lab,col,tipT,dash){
+    const w=Math.max(X(t1)-X(t0)-1,3); const a={x:X(t0),y:ry(row),width:w,height:RH,rx:3,fill:fill};
+    if(dash){a.fill="transparent";a.stroke="var(--muted)";a["stroke-dasharray"]="3 3"}
+    const r=el(s,"rect",a); if(lab&&w>[...lab].reduce((t,c)=>t+(c.charCodeAt(0)>0x2e80?12:6.5),0)+6)el(s,"text",{x:X(t0)+w/2,y:ry(row)+RH/2+4,"font-size":10.5,fill:col||"#fff","text-anchor":"middle"},lab); if(tipT)hover(r,tipT);
+  }
+  function title(y0,t,v,c){el(s,"text",{x:6,y:y0+14,"font-size":14,"font-weight":600,fill:"var(--ink)"},t);el(s,"text",{x:994,y:y0+14,"font-size":13,"font-weight":600,fill:`var(${c})`,"text-anchor":"end"},v)}
+  // original
+  let y0=4; title(y0,"原版：1 个线程、带整段 token、逐个建 key、处理完卡在销毁上","全部完成约 94 ms","--bad");
+  let ry=lanes(y0,["ZMQ 接收线程","store/retrieve 线程","lookup 线程","GPU0 拷贝","GPU1 拷贝","GPU2 拷贝","GPU3 拷贝"]);
+  const D=2.4;
+  for(let k=0;k<4;k++)box(ry,0,k*D,(k+1)*D,"var(--s2)","解码","#fff",`rank${k} 的 store：解码整段 153,600 token，约 2.4 ms，持有 GIL`);
+  box(ry,0,4*D,5*D,"var(--s2)","解码","#fff","lookup：解码整段 prompt，约 2.4 ms");
+  let t=D;
+  for(let k=0;k<4;k++){const st=Math.max(t,(k+1)*D);box(ry,1,st,st+3,"var(--cpu)",`r${k}`,"#fff",`rank${k}：handler 约 3 ms`);box(ry,1,st+3,st+23,"var(--bad)","销毁等拷贝","#fff",`rank${k}：卡在销毁 event 上，等 GPU${k} 拷完`);
+    if(st+3>0.5)box(ry,3+k,0,st+3,null,"等线程","var(--muted)",`rank${k} 的请求在排队，GPU${k} 空等`,true);
+    box(ry,3+k,st+3,st+23,"var(--gpu)",`rank${k} 拷贝`,"var(--ink)",`GPU${k} 拷贝约 20 ms`); t=st+23;}
+  box(ry,2,5*D,5*D+2.6,"var(--s4)","哈希","#fff","lookup：把整段 prompt 从头哈希一遍，约 2.6 ms");
+  box(ry,2,5*D+2.6,5*D+4.3,"var(--s4)","建key","#fff","lookup：逐个构造 2,400 个 ObjectKey，约 1.7 ms");
+  el(s,"text",{x:X(5*D+4.3)+8,y:ry(2)+RH/2+4,"font-size":11,fill:"var(--ink2)"},"哈希整段 prompt 2.6 ms + 逐个建 2,400 个 key 1.7 ms");
+  el(s,"text",{x:X(5*D)+8,y:ry(0)+RH/2+4,"font-size":11,fill:"var(--ink2)"},"4 个 store + 1 个 lookup 逐个解码整段 token，共约 12 ms（持有 GIL）");
+  el(s,"line",{x1:X(t),y1:y0+20,x2:X(t),y2:ry(6)+RH,stroke:"var(--ink2)","stroke-dasharray":"4 3"});
+  // final
+  y0=ry(6)+RH+26; title(y0,"四项全开：只带块哈希、批量建 key、4 个线程、不再卡在销毁上","全部完成约 23 ms","--good");
+  ry=lanes(y0,["ZMQ 接收线程","线程 0（rank0）","线程 1（rank1）","线程 2（rank2）","线程 3（rank3）","lookup 线程","GPU0 拷贝","GPU1 拷贝","GPU2 拷贝","GPU3 拷贝"]);
+  box(ry,0,0,0.3,"var(--s2)","",null,"5 个请求只带块哈希：解码每个 key 约 1 µs");
+  el(s,"text",{x:X(0.3)+8,y:ry(0)+RH/2+4,"font-size":11,fill:"var(--ink2)"},"请求里只有块哈希（store 2 KB），解码几乎不花时间");
+  for(let k=0;k<4;k++){box(ry,1+k,0.3,3.3,"var(--cpu)",`r${k}`,"#fff",`rank${k}：handler 约 3 ms，处理完立刻返回`);box(ry,6+k,3.3,23.3,"var(--gpu)",`rank${k} 拷贝`,"var(--ink)",`GPU${k} 拷贝约 20 ms`)}
+  box(ry,5,0.3,0.74,"var(--s4)","",null,"lookup：哈希已由 client 算好；批量构造 2,400 个 key 约 0.44 ms");
+  el(s,"text",{x:X(0.74)+8,y:ry(5)+RH/2+4,"font-size":11,fill:"var(--ink2)"},"不用再哈希；批量建 key 0.44 ms");
+  el(s,"line",{x1:X(23.3),y1:y0+20,x2:X(23.3),y2:ry(9)+RH,stroke:"var(--ink2)","stroke-dasharray":"4 3"});
+  const yb=ry(9)+RH+16; for(let k=0;k<=100;k+=20)el(s,"text",{x:X(k),y:yb,"font-size":11,fill:"var(--muted)","text-anchor":"middle"},k+" ms");
+  s.setAttribute("viewBox",`0 0 1000 ${yb+8}`);
+})();
+
+// ---------- destroy breakdown ----------
+(function(){
+  const s=document.getElementById("dst"), L=230, R=960, X=t=>L+(R-L)*t/90, RH=22;
+  const cases=[["A. GPU 空闲时销毁",[],0],["B. 卡上正在做一次拷贝（20 ms）",[[0,20,"KV 拷贝 20 ms"]],20],["C. 卡上排了 3 次拷贝（60 ms）",[[0,20,"拷贝 1"],[20,40,"拷贝 2"],[40,60,"拷贝 3"]],60]];
+  cases.forEach((c,i)=>{
+    const y0=6+i*92, yt=y0+24, yg=y0+50;
+    el(s,"text",{x:6,y:y0+14,"font-size":13,"font-weight":600,fill:"var(--ink)"},c[0]);
+    el(s,"rect",{x:4,y:yt-2,width:992,height:RH+2,rx:3,fill:"var(--rule2)"}); el(s,"text",{x:14,y:yt+15,"font-size":12,fill:"var(--ink2)"},"server 线程");
+    el(s,"rect",{x:4,y:yg-2,width:992,height:RH+2,rx:3,fill:"var(--rule2)"}); el(s,"text",{x:14,y:yg+15,"font-size":12,fill:"var(--ink2)"},"这张卡（GPU）");
+    c[1].forEach(g=>{el(s,"rect",{x:X(g[0]),y:yg,width:X(g[1])-X(g[0])-2,height:RH,rx:3,fill:"var(--gpu)"});el(s,"text",{x:(X(g[0])+X(g[1]))/2,y:yg+15,"font-size":11,fill:"var(--ink)","text-anchor":"middle"},g[2])});
+    const w=c[2];
+    if(w>0){const r=el(s,"rect",{x:X(0),y:yt,width:X(w)-X(0)-2,height:RH,rx:3,fill:"var(--bad)"});el(s,"text",{x:(X(0)+X(w))/2,y:yt+15,"font-size":11,fill:"#fff","text-anchor":"middle"},(w<40?`等 GPU 排空 ${w} ms`:`等 GPU 排空（SyncAllStreams）${w} ms`));hover(r,"销毁在等本进程这张卡上排着的所有工作做完")}
+    const d=el(s,"rect",{x:X(w),y:yt,width:Math.max(X(w+1.3)-X(w),4),height:RH,rx:3,fill:"var(--s1)"}); hover(d,"销毁本身约 1.3 ms");
+    el(s,"text",{x:X(w+1.3)+8,y:yt+15,"font-size":12,fill:"var(--ink)"},`销毁共约 ${(w+1.3).toFixed(1)} ms`+(w>0?`（其中真正销毁 1.3 ms）`:`（全是销毁本身）`));
+  });
+  for(let t=0;t<=90;t+=10){el(s,"text",{x:X(t),y:292,"font-size":11,fill:"var(--muted)","text-anchor":"middle"},t+" ms")}
+})();
+(function(){
+  const s=document.getElementById("dst2"), L=56, R=480, T=14, B=250, X=v=>L+(R-L)*v/60, Y=v=>B-(B-T)*v/60;
+  for(let v=0;v<=60;v+=10){el(s,"line",{x1:L,y1:Y(v),x2:R,y2:Y(v),stroke:"var(--rule2)"});el(s,"text",{x:L-6,y:Y(v)+4,"font-size":11,fill:"var(--muted)","text-anchor":"end"},v);el(s,"text",{x:X(v),y:B+16,"font-size":11,fill:"var(--muted)","text-anchor":"middle"},v)}
+  el(s,"line",{x1:L,y1:B,x2:R,y2:B,stroke:"var(--muted)"}); el(s,"line",{x1:L,y1:T,x2:L,y2:B,stroke:"var(--muted)"});
+  el(s,"line",{x1:X(0),y1:Y(1.3),x2:X(58.7),y2:Y(60),stroke:"var(--ink2)","stroke-dasharray":"5 4"});
+  el(s,"text",{x:(L+R)/2,y:B+34,"font-size":12,fill:"var(--ink2)","text-anchor":"middle"},"这张卡上排着的 GPU 工作（ms）");
+  el(s,"text",{x:14,y:(T+B)/2,"font-size":12,fill:"var(--ink2)","text-anchor":"middle",transform:`rotate(-90 14 ${(T+B)/2})`},"销毁耗时（ms）");
+  [[0,1.3,"GPU 空闲：1.3 ms"],[40,40.8,"40 ms 工作：40.8 ms"],[50,50.9,"50 ms 工作：50.9 ms"]].forEach(p=>{
+    const c=el(s,"circle",{cx:X(p[0]),cy:Y(p[1]),r:6,fill:"var(--bad)",stroke:"var(--card)","stroke-width":2});
+    el(s,"text",{x:X(p[0])+(p[0]>45?-10:10),y:Y(p[1])+(p[0]>45?-10:-8),"font-size":12,fill:"var(--ink)","text-anchor":p[0]>45?"end":"start"},p[2]);
+    hover(c,p[2]);
+  });
+})();
+
+// ---------- swimlane: one store, original vs pool ----------
+(function(){
+  const s=document.getElementById("swim"), W=1000, LW=178, R=16, X=t=>LW+(W-LW-R)*t/100, BH=24, PH=278;
+  const d=el(s,"defs",{});
+  d.innerHTML=`<marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--ink2)"/></marker>
+  <marker id="arB" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--s1)"/></marker>
+  <marker id="arP" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--s2)"/></marker>
+  <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--bad)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--card)" stroke-width="2" stroke-opacity=".45"/></pattern>`;
+  const LANES={acpu:[34,"ATOM · CPU 线程"],agpu:[68,"ATOM · GPU（forward）"],s1:[150,"server · 线程（这个请求）"],s2:[184,"server · 线程（下一个请求）"],sgpu:[218,"server · GPU（拷贝）"]};
+  function panel(y0,title,verdict,vc,pool){
+    const ly=k=>y0+LANES[k][0];
+    for(const k in LANES){el(s,"rect",{x:4,y:ly(k)-4,width:W-8,height:32,rx:4,fill:"var(--rule2)"});el(s,"text",{x:14,y:ly(k)+16,"font-size":12,fill:"var(--ink2)"},LANES[k][1])}
+    el(s,"text",{x:6,y:y0+18,"font-size":14,"font-weight":600,fill:"var(--ink)"},title);
+    el(s,"text",{x:W-6,y:y0+18,"font-size":13,"font-weight":600,fill:`var(${vc})`,"text-anchor":"end"},verdict);
+    function box(k,a,b,lab,kind,tipText){
+      const x0=X(a),x1=X(b),y=ly(k); let at={x:x0,y:y,width:x1-x0,height:BH,rx:3}, col="#fff", fw=400;
+      if(kind==="cpu")at.fill="var(--cpu)"; else if(kind==="gpu"){at.fill="var(--gpu)";col="var(--ink)"}
+      else if(kind==="block"){at.fill="url(#hatch)";fw=600} else if(kind==="done")at.fill="var(--good)";
+      else if(kind==="wait"){at.fill="transparent";at.stroke="var(--muted)";at["stroke-dasharray"]="4 3";col="var(--muted)"}
+      else if(kind==="idle"){at.fill="transparent";at.stroke="var(--good)";at["stroke-dasharray"]="4 3";col="var(--good)";fw=600}
+      const r=el(s,"rect",at); el(s,"text",{x:(x0+x1)/2,y:y+BH/2+4,"font-size":11.5,fill:col,"font-weight":fw,"text-anchor":"middle"},lab);
+      if(tipText)hover(r,tipText);
+    }
+    function flag(k,t,n,c){const x=X(t),y=ly(k);el(s,"line",{x1:x,y1:y-2,x2:x,y2:y+BH+2,stroke:`var(${c})`,"stroke-width":3});el(s,"circle",{cx:x,cy:y-3,r:9,fill:`var(${c})`});el(s,"text",{x:x,y:y+1,"font-size":11,fill:"#fff","font-weight":600,"text-anchor":"middle"},n)}
+    function arrow(x0,ya,x1,yb,m,st,dash){el(s,"line",{x1:x0,y1:ya,x2:x1,y2:yb,stroke:st||"var(--ink2)","stroke-width":1.8,"marker-end":`url(#${m||"ar"})`,"stroke-dasharray":dash||""})}
+    function note(x,y,t,c,anc){el(s,"text",{x:x,y:y,"font-size":12,fill:c||"var(--ink2)","text-anchor":anc||"start"},t)}
+    box("acpu",0,13,pool?"取池中①·record":"新建①·record","cpu");
+    box("agpu",0,40,"forward（写这些 KV）","gpu"); flag("agpu",40,"①","--s1");
+    arrow(X(13),ly("acpu")+BH,X(15),ly("s1")-2); note(X(14)-8,y0+120,"请求：① 的 handle + block + key","var(--ink2)","end");
+    box("sgpu",27,40,"等 ①","wait"); box("sgpu",40,68,"拷贝 KV（383 MB 约 20 ms）","gpu"); flag("sgpu",68,"②","--s2");
+    arrow(X(40),ly("agpu")+BH+4,X(40),ly("sgpu")-14,"arB","var(--s1)","5 4"); note(X(40)+6,y0+110,"GPU 上：① 到了才开始拷","var(--s1)");
+    if(!pool){
+      box("s1",15,27,"导入①·建②","cpu");
+      box("s1",27,68,"销毁导入的 ①：卡住，等这张卡拷完","block","ROCm 7.2.x：销毁跨进程 event 要等本进程在这张卡上的工作做完");
+      box("s2",29,68,"别的 rank 的请求：排队，线程被占着","wait"); box("s2",68,80,"这时才处理","cpu");
+      arrow(X(68),ly("s1")-2,X(70),ly("acpu")+BH,"arP","var(--s2)"); note(X(70)+6,y0+130,"② 的 handle 到这时才回复","var(--s2)");
+      box("acpu",70,82,"导入②·query","cpu"); box("acpu",82,100,"② 到 → 放 block","done");
+    } else {
+      box("s1",15,27,"直接wait·取②","cpu"); box("s1",27,68,"空闲：不再销毁","idle");
+      box("s2",29,52,"下一个请求：立刻处理","cpu");
+      arrow(X(27),ly("s1")-2,X(29),ly("acpu")+BH,"arP","var(--s2)"); note(X(29)+6,y0+130,"立刻回复 ②","var(--s2)");
+      box("acpu",29,68,"每步 query ②（不阻塞）","cpu"); box("acpu",68,86,"② 到 → 放 block","done");
+    }
+    note(W-10,y0+262,"时间 →","var(--muted)","end");
+  }
+  panel(0,"原版：每次新建 / 导入 event，用完就销毁","线程每次卡约 20 ms，下一个请求排队","--bad",false);
+  el(s,"line",{x1:4,y1:PH-6,x2:W-4,y2:PH-6,stroke:"var(--muted)","stroke-dasharray":"3 3"});
+  panel(PH,"事件池：event 反复 record，handle 只导入一次","不再销毁：立刻回复，下一个请求马上处理","--good",true);
+})();
+
+// ---------- ObjectKey ----------
+(function(){
+  const s=document.getElementById("key"), L=150, R=420, X=v=>L+(R-L)*v/2;
+  [["逐个 dataclass",1.67,"--s2"],["只校验一次、批量",0.44,"--s1"]].forEach((r,i)=>{
+    const y=12+i*44; el(s,"text",{x:L-8,y:y+17,"font-size":13,fill:"var(--ink)","text-anchor":"end"},r[0]);
+    el(s,"rect",{x:L,y:y,width:X(r[1])-L,height:24,rx:4,fill:`var(${r[2]})`});
+    el(s,"text",{x:X(r[1])+6,y:y+17,"font-size":12,fill:"var(--ink)"},r[1]+" ms"+(i?"（−74 %）":""));
+  });
+  [0,0.5,1,1.5,2].forEach(v=>el(s,"text",{x:X(v),y:120,"font-size":11,fill:"var(--muted)","text-anchor":"middle"},v));
+})();
+
+// ---------- 4 threads: with vs without pool ----------
+(function(){
+  const s=document.getElementById("cmp4"), L=170, R=980, X=t=>L+(R-L)*t/80, RH=22, H=3, C=20;
+  function lane(y,lab){el(s,"rect",{x:4,y:y-2,width:992,height:RH+4,rx:3,fill:"var(--rule2)"});el(s,"text",{x:12,y:y+15,"font-size":12,fill:"var(--ink2)"},lab)}
+  function box(y,t0,t1,fill,lab,col,tipT){const r=el(s,"rect",{x:X(t0),y:y,width:X(t1)-X(t0)-1,height:RH,rx:3,fill:fill});if(lab&&X(t1)-X(t0)>lab.length*7)el(s,"text",{x:(X(t0)+X(t1))/2,y:y+15,"font-size":11,fill:col||"#fff","text-anchor":"middle"},lab);if(tipT)hover(r,tipT)}
+  function note(t,y){const x=X(t);el(s,"line",{x1:x,y1:y-4,x2:x,y2:y+RH+4,stroke:"var(--s2)","stroke-width":2.5});el(s,"circle",{cx:x,cy:y-6,r:4,fill:"var(--s2)"})}
+  function panel(y0,title,pool){
+    el(s,"text",{x:6,y:y0+14,"font-size":13,"font-weight":600,fill:"var(--ink)"},title);
+    const yt=y0+24, yg=y0+54; lane(yt,"线程 0（rank0）"); lane(yg,"GPU0 拷贝");
+    let tt=0, gpuFree=0, end=0;
+    ["a","b","c"].forEach(n=>{
+      const st=tt; box(yt,st,st+H,"var(--cpu)",n,"#fff",`请求 ${n}：server 处理约 3 ms`);
+      const cs=Math.max(st+H,gpuFree), ce=cs+C; box(yg,cs,ce,"var(--gpu)","拷贝 "+n,"var(--ink)",`拷贝 ${n} 约 20 ms`); gpuFree=ce;
+      if(!pool){ box(yt,st+H,ce,"var(--bad)","卡在销毁",null,`请求 ${n}：线程卡在销毁上，等拷贝 ${n} 做完`); tt=ce; note(ce,yt); }
+      else { tt=st+H; note(ce,yg); }
+      end=ce;
+    });
+    el(s,"text",{x:L,y:yg+RH+18,"font-size":12,fill:"var(--ink)"},`3 个请求做完：约 ${end} ms；线程空出来：约 ${pool?3*H:end} ms`);
+  }
+  panel(4,"只开 4 个线程：办一件、等一会儿",false);
+  panel(130,"4 个线程 + 事件池：处理完马上接下一个，拷贝首尾相接",true);
+  for(let t=0;t<=80;t+=10)el(s,"text",{x:X(t),y:256,"font-size":11,fill:"var(--muted)","text-anchor":"middle"},t+" ms");
+})();
+
+// ---------- results bars (original vs optimized) ----------
+function bars2(id, groups, unit, max, W, labA, labB){
+  const s=document.getElementById(id), L=W>600?200:110, R=W-90, top=10, bh=20, gap=5, gh=2*(bh+gap)+18;
+  const X=v=>L+(R-L)*v/max, H=top+gh*groups.length;
+  for(let k=0;k<=4;k++){const v=max*k/4,x=X(v);el(s,"line",{x1:x,y1:top,x2:x,y2:H,stroke:"var(--rule2)"});el(s,"text",{x:x,y:H+14,"font-size":11,fill:"var(--muted)","text-anchor":"middle"},(max<20?v.toFixed(1):v.toFixed(0)))}
+  groups.forEach((g,gi)=>{
+    const y0=top+gi*gh;
+    el(s,"text",{x:L-8,y:y0+gh/2-4,"font-size":13,fill:"var(--ink)","text-anchor":"end"},g[0]);
+    [[g[1],"--s2",labA,g[3]],[g[2],"--s1",labB,g[4]]].forEach((it,i)=>{
+      const y=y0+4+i*(bh+gap), w=X(it[0])-L;
+      el(s,"rect",{x:L,y:y,width:Math.max(w,1),height:bh,rx:4,fill:`var(${it[1]})`});
+      el(s,"text",{x:L+w+5,y:y+bh/2+4,"font-size":12,fill:"var(--ink)"},it[0]+(unit==="s"?" s":" ms")+(i===1?`（${Math.round((g[2]/g[1]-1)*100)} %）`:""));
+      const hit=el(s,"rect",{x:L,y:y-2,width:R-L,height:bh+4,fill:"transparent"});
+      hover(hit,`<b>${g[0]}</b><br>${it[2]}：${it[0]} ${unit}`+(it[3]?`<br><span style="color:var(--muted)">范围 ${it[3]}</span>`:""));
+    });
+  });
+  el(s,"line",{x1:L,y1:top,x2:L,y2:H,stroke:"var(--muted)"});
+  s.setAttribute("viewBox",`0 0 ${W} ${H+22}`);
+}
+bars2("e2e",[["读回 KV p50",855,215,"745–947","191–242"],["retrieve 排队 p50",360,16,"278–431","13–18"],["retrieve 执行均值",119,18,"99–132","17–21"],["lookup 执行均值",51.4,20.9,"50.0–52.2","20.1–21.9"],["store 执行均值",30.7,3.0,"30.6–30.9","2.9–3.0"]],"ms",1000,1000,"原版","三项全开");
+
+// ---------- mono hang: deadlock vs fixed ----------
+(function(){
+  const s=document.getElementById("mono"), L=190, R=980, X=t=>L+(R-L)*t/100, RH=20;
+  function lane(y,lab){el(s,"rect",{x:4,y:y-2,width:992,height:RH+4,rx:3,fill:"var(--rule2)"});el(s,"text",{x:12,y:y+14,"font-size":12,fill:"var(--ink2)"},lab)}
+  function box(y,t0,t1,fill,lab,col,tipT,dash){const a={x:X(t0),y:y,width:Math.max(X(t1)-X(t0)-1,3),height:RH,rx:3,fill:fill||"transparent"};if(dash){a.stroke=dash;a["stroke-dasharray"]="4 3";a["stroke-width"]=1.5}const r=el(s,"rect",a);if(lab)el(s,"text",{x:(X(t0)+X(t1))/2,y:y+14,"font-size":11,fill:col||"#fff","text-anchor":"middle"},lab);if(tipT)hover(r,tipT)}
+  function title(y,t,v,c){el(s,"text",{x:6,y:y,"font-size":14,"font-weight":600,fill:"var(--ink)"},t);el(s,"text",{x:994,y:y,"font-size":13,"font-weight":600,fill:`var(${c})`,"text-anchor":"end"},v)}
+  // deadlock
+  let y=18; title(y,"原版：server 在 GPU 上等 ①","互相等，永远卡住","--bad");
+  const ya=y+12, y06=ya+26, y7p=y06+26, y7m=y7p+26, y8=y7m+26, ys=y8+30;
+  lane(ya,"ATOM 队列（GPU）"); lane(y06,"CU 0 … CU 6"); lane(y7p,"CU 7：轮询 kernel"); lane(y7m,"CU 7：mono 的 CTA 7"); lane(y8,"CU 8 … CU 255"); lane(ys,"server 队列（GPU）");
+  box(ya,0,20,"var(--gpu)","上一步工作","var(--ink)");
+  box(ya,20,100,"var(--s1)","mono：要 256 个 CTA 同时驻留，只上去 255 个","#fff","mono 派发时 CU 7 的槽位已被轮询 kernel 占了");
+  box(y06,20,100,"var(--s1)","mono CTA：在全局屏障上自旋，等 CTA 7","#fff");
+  box(y8,20,100,"var(--s1)","mono CTA：在全局屏障上自旋，等 CTA 7","#fff");
+  box(y7p,8,100,"var(--bad)","轮询 kernel（1 个线程）占着槽位，一直读 ① 的信号","#fff","ROCm 7.2：stream wait 由 streamOpsWait 轮询 kernel 实现");
+  box(y7m,20,100,null,"进不来：槽位被轮询 kernel 占着","var(--s1)","mono 的 CTA 7 等这个 CU 空出来","var(--s1)");
+  box(ys,8,100,"var(--bad)","等 ① —— 而 ① 排在 mono 后面，要等 mono 跑完才会写","#fff");
+  el(s,"text",{x:L,y:ys+RH+18,"font-size":12,"font-weight":600,fill:"var(--bad)"},"循环等待：mono 等 CU 7 的槽位 → 轮询 kernel 占着槽位等 ① → ① 要等 mono 跑完 → …");
+  // fixed
+  y=ys+RH+56; title(y,"修复后：CPU 上确认 ① 完成，再排拷贝","GPU 上没有轮询 kernel","--good");
+  const fa=y+12, fc=fa+28, fs=fc+30, fg=fs+26;
+  lane(fa,"ATOM 队列（GPU）"); lane(fc,"CU 0 … CU 255"); lane(fs,"server / client 线程（CPU）"); lane(fg,"server 队列（GPU）");
+  box(fa,0,20,"var(--gpu)","上一步工作","var(--ink)");
+  el(s,"line",{x1:X(20),y1:fa-4,x2:X(20),y2:fs+RH+4,stroke:"var(--s2)","stroke-width":2.5});
+  el(s,"text",{x:X(20)+5,y:fa-5,"font-size":11,fill:"var(--s2)"},"① 完成");
+  box(fa,20,62,"var(--s1)","mono：256 个 CTA 全部驻留，正常跑完","#fff");
+  box(fc,20,62,"var(--s1)","mono CTA","#fff");
+  box(fs,0,20,null,"CPU 上 query() 查 ①：未完成","var(--muted)","只读主机内存，不起 GPU kernel","var(--muted)");
+  box(fs,20,23,"var(--cpu)","");
+  el(s,"text",{x:X(23)+6,y:fs+14,"font-size":11,fill:"var(--ink2)"},"完成 → 排拷贝（不排 GPU 等待）");
+  box(fg,23,47,"var(--gpu)","拷贝 KV","var(--ink)","拷贝不依赖 mono，能自己跑完");
+  s.setAttribute("viewBox",`0 0 1000 ${fg+RH+12}`);
+})();
+
+// ---------- server-only sweep line charts ----------
+const SWEEP={"stock":{"retrieve":[[32768,48.8],[49152,86.6],[65536,124.5],[81920,161.0],[98304,203.0],[114688,237.1],[131072,273.1],[147456,376.3],[163840,350.6],[180224,389.7],[196608,425.9],[212992,465.3],[229376,498.9],[245760,540.6],[262144,578.7],[278528,614.3],[294912,649.4],[311296,691.7],[327680,723.3],[344064,760.3],[360448,802.3],[376832,845.2],[393216,880.7],[409600,914.5],[425984,954.6],[442368,989.2],[458752,1028.2],[475136,1067.9],[491520,1106.4],[507904,1141.1],[524288,1178.8]],"store":[[16384,70.7],[32768,64.8],[49152,67.1],[65536,70.7],[81920,71.5],[98304,72.1],[114688,75.8],[131072,78.3],[147456,83.8],[163840,84.4],[180224,87.8],[196608,89.5],[212992,95.4],[229376,93.1],[245760,97.1],[262144,96.5],[278528,99.6],[294912,99.0],[311296,98.5],[327680,102.4],[344064,103.0],[360448,113.0],[376832,111.0],[393216,112.9],[409600,116.4],[425984,116.9],[442368,119.5],[458752,123.4],[475136,123.6],[491520,121.4],[507904,130.9],[524288,129.8]],"turn":[[16384,80.2],[32768,118.0],[49152,159.9],[65536,203.1],[81920,242.1],[98304,286.6],[114688,326.2],[131072,366.5],[147456,476.8],[163840,453.3],[180224,499.4],[196608,536.9],[212992,583.5],[229376,617.8],[245760,665.7],[262144,704.9],[278528,745.1],[294912,781.4],[311296,825.7],[327680,862.2],[344064,901.6],[360448,1028.2],[376832,999.4],[393216,1038.9],[409600,1077.7],[425984,1193.3],[442368,1157.9],[458752,1203.7],[475136,1319.4],[491520,1284.7],[507904,1331.0],[524288,1443.3]],"lookup":[[16384,9.5],[32768,4.3],[49152,6.1],[65536,7.8],[81920,9.5],[98304,11.5],[114688,13.2],[131072,15.0],[147456,16.6],[163840,18.2],[180224,20.4],[196608,21.4],[212992,22.8],[229376,25.6],[245760,27.9],[262144,29.6],[278528,31.1],[294912,33.0],[311296,35.4],[327680,36.4],[344064,38.2],[360448,112.8],[376832,43.1],[393216,45.1],[409600,46.7],[425984,121.7],[442368,49.1],[458752,52.0],[475136,127.7],[491520,56.8],[507904,59.0],[524288,134.5]]},"pool":{"retrieve":[[32768,19.1],[49152,32.6],[65536,45.8],[81920,59.5],[98304,74.4],[114688,91.2],[131072,106.1],[147456,120.1],[163840,136.1],[180224,150.7],[196608,164.9],[212992,180.8],[229376,193.7],[245760,207.5],[262144,224.3],[278528,235.4],[294912,249.7],[311296,268.5],[327680,278.4],[344064,293.8],[360448,307.5],[376832,324.0],[393216,338.4],[409600,353.2],[425984,364.5],[442368,382.0],[458752,396.9],[475136,486.5],[491520,426.2],[507904,439.0],[524288,453.3]],"store":[[16384,41.4],[32768,33.5],[49152,36.8],[65536,37.9],[81920,39.1],[98304,103.9],[114688,46.1],[131072,46.3],[147456,52.2],[163840,51.7],[180224,53.6],[196608,60.3],[212992,64.0],[229376,64.3],[245760,64.3],[262144,67.1],[278528,138.6],[294912,69.9],[311296,69.3],[327680,74.3],[344064,72.7],[360448,75.8],[376832,83.6],[393216,81.9],[409600,148.0],[425984,81.1],[442368,88.1],[458752,89.2],[475136,92.3],[491520,94.0],[507904,94.8],[524288,99.3]],"turn":[[16384,50.9],[32768,57.1],[49152,76.2],[65536,92.3],[81920,108.8],[98304,191.0],[114688,151.4],[131072,169.2],[147456,190.1],[163840,207.6],[180224,226.7],[196608,248.7],[212992,269.7],[229376,286.1],[245760,301.2],[262144,322.6],[278528,407.2],[294912,355.8],[311296,374.8],[327680,392.7],[344064,407.1],[360448,425.7],[376832,452.3],[393216,468.3],[409600,551.9],[425984,498.0],[442368,523.5],[458752,541.3],[475136,636.3],[491520,580.7],[507904,597.5],[524288,694.2]],"lookup":[[16384,9.5],[32768,4.4],[49152,6.7],[65536,8.5],[81920,10.2],[98304,12.6],[114688,14.0],[131072,16.6],[147456,17.7],[163840,19.8],[180224,22.4],[196608,23.5],[212992,24.8],[229376,28.1],[245760,29.4],[262144,31.2],[278528,33.1],[294912,36.1],[311296,36.9],[327680,39.9],[344064,40.6],[360448,42.3],[376832,44.6],[393216,47.9],[409600,50.6],[425984,52.2],[442368,53.3],[458752,55.0],[475136,57.5],[491520,60.4],[507904,63.5],[524288,141.5]]},"hash":{"retrieve":[[32768,45.8],[49152,80.0],[65536,117.0],[81920,152.1],[98304,185.7],[114688,221.5],[131072,254.3],[147456,292.2],[163840,329.2],[180224,360.3],[196608,396.8],[212992,428.9],[229376,465.2],[245760,502.8],[262144,535.0],[278528,573.9],[294912,610.1],[311296,646.3],[327680,680.3],[344064,785.1],[360448,751.8],[376832,789.2],[393216,896.4],[409600,857.6],[425984,888.7],[442368,929.3],[458752,965.6],[475136,999.8],[491520,1032.5],[507904,1072.5],[524288,1104.1]],"store":[[16384,65.4],[32768,60.9],[49152,60.6],[65536,62.0],[81920,61.5],[98304,60.9],[114688,61.2],[131072,60.9],[147456,62.1],[163840,64.1],[180224,61.3],[196608,61.5],[212992,62.4],[229376,62.9],[245760,63.3],[262144,64.4],[278528,63.5],[294912,64.0],[311296,63.8],[327680,62.4],[344064,63.5],[360448,64.9],[376832,64.0],[393216,66.0],[409600,64.3],[425984,65.2],[442368,65.5],[458752,63.8],[475136,69.4],[491520,69.9],[507904,66.0],[524288,66.5]],"turn":[[16384,73.9],[32768,109.8],[49152,144.5],[65536,184.1],[81920,219.4],[98304,253.5],[114688,290.3],[131072,323.9],[147456,363.9],[163840,404.2],[180224,433.1],[196608,471.1],[212992,505.0],[229376,542.9],[245760,582.0],[262144,616.2],[278528,655.7],[294912,693.2],[311296,730.3],[327680,763.8],[344064,870.6],[360448,840.1],[376832,877.4],[393216,987.2],[409600,948.0],[425984,981.0],[442368,1022.7],[458752,1133.6],[475136,1180.3],[491520,1134.2],[507904,1170.3],[524288,1205.0]],"lookup":[[16384,8.4],[32768,3.0],[49152,3.9],[65536,5.0],[81920,5.8],[98304,6.9],[114688,7.6],[131072,8.6],[147456,9.5],[163840,10.9],[180224,11.5],[196608,12.7],[212992,13.6],[229376,14.7],[245760,15.8],[262144,16.7],[278528,18.1],[294912,18.9],[311296,20.1],[327680,20.9],[344064,21.8],[360448,23.1],[376832,24.0],[393216,24.6],[409600,26.0],[425984,26.9],[442368,27.7],[458752,104.0],[475136,111.0],[491520,31.6],[507904,31.6],[524288,34.1]]},"all3":{"retrieve":[[32768,15.5],[49152,27.0],[65536,38.7],[81920,50.2],[98304,62.0],[114688,74.6],[131072,86.4],[147456,98.2],[163840,110.0],[180224,121.5],[196608,134.3],[212992,146.4],[229376,158.2],[245760,169.6],[262144,183.1],[278528,196.0],[294912,277.7],[311296,217.8],[327680,233.3],[344064,243.4],[360448,255.1],[376832,267.9],[393216,279.5],[409600,292.0],[425984,303.8],[442368,315.0],[458752,326.3],[475136,338.7],[491520,350.0],[507904,363.9],[524288,375.6]],"store":[[16384,35.7],[32768,29.3],[49152,29.5],[65536,28.7],[81920,29.8],[98304,29.2],[114688,28.3],[131072,29.6],[147456,30.7],[163840,29.5],[180224,31.0],[196608,30.4],[212992,31.5],[229376,31.3],[245760,30.9],[262144,32.1],[278528,31.2],[294912,31.6],[311296,32.1],[327680,33.5],[344064,33.8],[360448,33.7],[376832,32.9],[393216,32.3],[409600,34.6],[425984,34.5],[442368,35.4],[458752,34.3],[475136,36.0],[491520,35.7],[507904,37.7],[524288,39.0]],"turn":[[16384,44.3],[32768,47.6],[49152,60.2],[65536,72.0],[81920,85.5],[98304,97.5],[114688,110.3],[131072,124.2],[147456,137.9],[163840,149.4],[180224,163.2],[196608,177.0],[212992,191.2],[229376,271.2],[245760,215.4],[262144,230.8],[278528,244.2],[294912,326.8],[311296,268.0],[327680,285.9],[344064,296.9],[360448,309.9],[376832,396.0],[393216,334.3],[409600,349.8],[425984,473.7],[442368,375.9],[458752,386.3],[475136,475.4],[491520,413.8],[507904,541.4],[524288,446.1]],"lookup":[[16384,8.5],[32768,2.8],[49152,3.7],[65536,4.6],[81920,5.4],[98304,6.2],[114688,7.3],[131072,8.1],[147456,9.0],[163840,9.8],[180224,10.7],[196608,12.2],[212992,13.2],[229376,81.7],[245760,14.7],[262144,15.5],[278528,16.9],[294912,17.4],[311296,17.9],[327680,19.0],[344064,19.7],[360448,20.9],[376832,95.0],[393216,22.4],[409600,23.0],[425984,135.3],[442368,25.4],[458752,25.6],[475136,100.4],[491520,28.0],[507904,139.6],[524288,31.3]]},"all4":{"retrieve":[[32768,14.4],[49152,23.6],[65536,32.9],[81920,43.3],[98304,52.5],[114688,61.8],[131072,71.3],[147456,81.7],[163840,91.5],[180224,100.5],[196608,110.5],[212992,120.1],[229376,130.7],[245760,140.5],[262144,149.5],[278528,159.1],[294912,169.7],[311296,178.9],[327680,188.8],[344064,198.6],[360448,210.1],[376832,218.8],[393216,228.3],[409600,237.9],[425984,246.5],[442368,258.3],[458752,267.0],[475136,276.5],[491520,286.1],[507904,367.0],[524288,305.6]],"store":[[16384,26.2],[32768,20.6],[49152,22.2],[65536,23.9],[81920,25.6],[98304,25.9],[114688,27.5],[131072,27.5],[147456,28.9],[163840,32.9],[180224,32.9],[196608,34.8],[212992,33.7],[229376,35.7],[245760,37.6],[262144,35.4],[278528,37.9],[294912,41.8],[311296,41.8],[327680,41.8],[344064,43.3],[360448,43.8],[376832,46.9],[393216,44.4],[409600,43.3],[425984,48.0],[442368,52.2],[458752,51.4],[475136,52.2],[491520,54.2],[507904,53.9],[524288,57.5]],"turn":[[16384,34.6],[32768,37.7],[49152,49.4],[65536,61.2],[81920,74.4],[98304,84.5],[114688,96.2],[131072,106.6],[147456,119.2],[163840,133.7],[180224,143.6],[196608,156.6],[212992,165.8],[229376,179.8],[245760,192.4],[262144,200.2],[278528,213.1],[294912,228.6],[311296,238.6],[327680,248.9],[344064,261.0],[360448,341.9],[376832,287.1],[393216,294.4],[409600,303.8],[425984,317.9],[442368,404.1],[458752,413.4],[475136,355.1],[491520,367.2],[507904,520.7],[524288,393.0]],"lookup":[[16384,8.3],[32768,2.7],[49152,3.5],[65536,4.4],[81920,5.5],[98304,6.0],[114688,6.8],[131072,7.7],[147456,8.5],[163840,9.3],[180224,10.2],[196608,11.2],[212992,12.0],[229376,13.4],[245760,14.1],[262144,15.2],[278528,16.0],[294912,17.0],[311296,17.7],[327680,18.2],[344064,19.0],[360448,87.9],[376832,21.3],[393216,21.5],[409600,22.5],[425984,23.2],[442368,93.4],[458752,94.8],[475136,26.2],[491520,26.8],[507904,99.5],[524288,29.8]]}};
+const SER=[["stock","原版","--s2"],["pool","只开事件池","--s1"],["hash","只开 client 哈希","--s3"],["all3","三项全开","--s4"],["all4","四项全开","--s5"]];
+function niceMax(v){const e=Math.pow(10,Math.floor(Math.log10(v)));for(const m of [1,1.5,2,2.5,3,4,5,6,8,10]){if(m*e>=v)return m*e}return 10*e}
+function lineChart(id,kind){
+  const s=document.getElementById(id), L=60, R=850, T=14, B=280, XM=524288;
+  let ym=0; SER.forEach(([k])=>SWEEP[k][kind].forEach(p=>{ym=Math.max(ym,p[1])})); ym=niceMax(ym*1.05);
+  const X=v=>L+(R-L)*v/XM, Y=v=>B-(B-T)*v/ym;
+  for(let k=0;k<=5;k++){const v=ym*k/5;el(s,"line",{x1:L,y1:Y(v),x2:R,y2:Y(v),stroke:"var(--rule2)"});el(s,"text",{x:L-6,y:Y(v)+4,"font-size":11,fill:"var(--muted)","text-anchor":"end"},Math.round(v).toLocaleString())}
+  [0,131072,262144,393216,524288].forEach(v=>el(s,"text",{x:X(v),y:B+16,"font-size":11,fill:"var(--muted)","text-anchor":"middle"},(v/1024)+"k"));
+  el(s,"line",{x1:L,y1:B,x2:R,y2:B,stroke:"var(--muted)"});
+  const ends=[];
+  SER.forEach(([k,lab,c])=>{
+    const pts=SWEEP[k][kind]; if(!pts.length)return;
+    el(s,"polyline",{points:pts.map(p=>`${X(p[0])},${Y(p[1])}`).join(" "),fill:"none",stroke:`var(${c})`,"stroke-width":2});
+    pts.forEach(p=>{el(s,"circle",{cx:X(p[0]),cy:Y(p[1]),r:2.2,fill:`var(${c})`});const h=el(s,"circle",{cx:X(p[0]),cy:Y(p[1]),r:6,fill:"transparent"});hover(h,`<b>${lab}</b><br>prompt ${p[0].toLocaleString()} token：${p[1]} ms`)});
+    const last=pts[pts.length-1]; ends.push({y:Y(last[1]),lab:`${lab} ${Math.round(last[1])}`});
+  });
+  ends.sort((a,b)=>a.y-b.y); for(let i=1;i<ends.length;i++)if(ends[i].y-ends[i-1].y<14)ends[i].y=ends[i-1].y+14;
+  ends.forEach(e=>el(s,"text",{x:R+8,y:e.y+4,"font-size":11.5,fill:"var(--ink)"},e.lab));
+}
+lineChart("lr","retrieve"); lineChart("ls","store"); lineChart("lt","turn");
+
+// ---------- language switch: keep the reading position ----------
+(function(){
+  const a=document.getElementById("lang");
+  a.addEventListener("click",ev=>{const h=document.documentElement.scrollHeight-innerHeight;if(h>0){ev.preventDefault();location.href=a.getAttribute("href")+"#pos="+(scrollY/h).toFixed(4)}});
+  const m=/pos=([0-9.]+)/.exec(location.hash);
+  if(m)addEventListener("load",()=>{const h=document.documentElement.scrollHeight-innerHeight;scrollTo(0,parseFloat(m[1])*h)});
+})();
+</script>
+</body>
+</html>

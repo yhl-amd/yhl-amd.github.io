@@ -5,3 +5,4 @@
 - [DeepSeek-V4.1-Flash 图解](dsv41-flash/)：V4.1-Flash 相对 V4 改了什么。概览、重点（CED、CSA2 跨层共享、分层 indexer、FP4 KV、SWA Bounded Replay）、对照论文图的精讲，附可交互的小演示。
 - [ATOM 中的 MegaMoE 实现](atom-megamoe/)：从 MoE 计算讲起，分三部分：概览、重点（4 次 launch、fixed-slot 与 compact 两种 dispatch、实例选择、DP pad 行屏蔽、GEMM 融合）、代码精讲与优化记录。基于 ATOM da0e87d / aiter 2274275。
 - [LMCache MP 模式的 RPC 开销 · MiniMax-M3 TP4](lmcache-mp-overheads/)：MP 模式为什么比进程内慢。原版 server 每次 RPC 的三笔开销（销毁导入的 IPC event 要等 GPU、每个 RPC 带整段 token 前缀、ObjectKey 逐个构造）的图解和举例，三项原型改动的端到端消融（原版、三项全开、inproc 各重复 3 次）和只压 server 的测试。基于 LMCache 0.5.6.dev139 / ATOM 6e9b3e1c5。
+- [LMCache MP 最终优化：四项改动 · MiniMax-M3 TP4](lmcache-mp-final/)（[English](lmcache-mp-final/en.html)）：server 每个 RPC 的四处浪费和对应的四项改动（IPC event 复用、token hash 挪到 client、批量构造 ObjectKey、`--max-gpu-workers 4`），配套的 mono 卡死修复，真实服务与只压 server 的逐项对比（sweep 到 512k），以及完整的复现步骤。中英文一键切换。基于 LMCache f22dec28 + yhl-amd/LMCache#2 / #3。
