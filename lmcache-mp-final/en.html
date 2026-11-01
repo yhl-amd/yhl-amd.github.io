@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LMCache MP final optimization: four changes</title>
+<title>LMCache MP final optimization: three changes</title>
 <style>
 :root{--bg:#f4f5f6;--card:#ffffff;--ink:#16191d;--ink2:#454d57;--muted:#69717b;--rule:#dce0e5;--rule2:#eceef1;
 --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--bad:#c4552b;--good:#23845a;--code:#eef0f2;--gpu:#c9d1d8;--cpu:#7c858f}
@@ -63,35 +63,34 @@ a{color:var(--s1)}
 <body>
 <a class="lang" id="lang" href="./" hreflang="zh-CN" lang="zh-CN">中文</a>
 <div class="wrap">
-<h1>LMCache MP final optimization: four changes</h1>
-<p class="sub">2026-10-31 · ATOM uses LMCache MP (<code>lmcache_driven</code> mode) for KV offload · Code: <a href="https://github.com/yhl-amd/LMCache/pull/2">yhl-amd/LMCache#2</a> (the three patches, on the LMCache f22dec28 shipped in the ATOM image), <a href="https://github.com/yhl-amd/LMCache/pull/3">#3</a> (the event pool ported to LMCache dev, with reproduction scripts)</p>
+<h1>LMCache MP final optimization: three changes</h1>
+<p class="sub">2026-10-31 (updated 11-01: batched ObjectKey construction dropped, data redone for three changes) · ATOM uses LMCache MP (<code>lmcache_driven</code> mode) for KV offload · Code: <a href="https://github.com/yhl-amd/LMCache/pull/2">yhl-amd/LMCache#2</a> (event pool and client hashing, on the LMCache f22dec28 shipped in the ATOM image), <a href="https://github.com/yhl-amd/LMCache/pull/3">#3</a> (the event pool ported to LMCache dev, with reproduction scripts)</p>
 
 <div class="card" style="border-left:4px solid var(--good)">
-<p><b>In one sentence</b>: the LMCache server wastes time in four places on every RPC: <b>destroying an event waits for the copy to finish</b>, <b>every request carries the whole token prefix</b>, <b>ObjectKeys are built and validated one by one</b>, and <b>4 ranks share 1 thread in one queue</b>. Each of the four changes removes one of them, with no overlap.</p>
+<p><b>In one sentence</b>: the LMCache server wastes time in three places on every RPC: <b>destroying an event waits for the copy to finish</b>, <b>every request carries the whole token prefix</b>, and <b>4 ranks share 1 thread in one queue</b>. Each of the three changes removes one of them, with no overlap.</p>
 </div>
 <div class="opt">
   <div><b class="n">1</b><b>IPC event reuse (event pool)</b><br>Events are re-recorded and imported once, never destroyed per operation</div>
   <div><b class="n">2</b><b>Token hashing moves to the client</b><br>No more whole token prefixes; only the chunk hashes of the range</div>
-  <div><b class="n">3</b><b>Batched ObjectKey construction</b><br>Validate once per call, fill fields in bulk</div>
-  <div><b class="n">4</b><b><code>--max-gpu-workers 4</code></b><br>One thread per rank, no shared queue</div>
+  <div><b class="n">3</b><b><code>--max-gpu-workers 4</code></b><br>One thread per rank, no single queue</div>
 </div>
 
-<p><b>Real service</b> (MiniMax-M3 TP4 c48 agentic, first three changes, server with 1 thread, 3 runs vs 3 runs):</p>
+<p><b>Real service</b> (11-01, MiniMax-M3 TP4 AgentX c48, 1800 s, three changes + companion fix, mono on, 1 run each):</p>
 <div class="kpis">
-  <div class="kpi"><div class="t">Server store execution, mean</div><div class="v">30.7 → 3.0 ms</div><div class="d">−90 %</div></div>
-  <div class="kpi"><div class="t">KV read back from LMCache, p50</div><div class="v">855 → 215 ms</div><div class="d">−75 %; p99 9.7 → 2.8 s</div></div>
-  <div class="kpi"><div class="t">TTFT p90</div><div class="v">1911 → 1525 ms</div><div class="d">−20 %, every run below every stock run</div></div>
-  <div class="kpi"><div class="t">Server store/retrieve thread busy</div><div class="v">45 % → 4.6 %</div><div class="d">GIL-holding samples 2746 → 671</div></div>
+  <div class="kpi"><div class="t">Throughput (tok/s/GPU)</div><div class="v">57,835 → 61,379</div><div class="d">+6 %; gap to in-process LMCache −6.9 % → −1.2 %</div></div>
+  <div class="kpi"><div class="t">KV read back from LMCache, p50</div><div class="v">575 → 197 ms</div><div class="d">−66 %; p99 12.1 → 8.0 s</div></div>
+  <div class="kpi"><div class="t">TTFT p90</div><div class="v">2,146 → 1,518 ms</div><div class="d">−29 %</div></div>
+  <div class="kpi"><div class="t">Server retrieve queueing p50</div><div class="v">167 → 0.2 ms</div><div class="d">Store queueing mean 355 → 4.5 ms</div></div>
 </div>
-<p><b>Server-only benchmark</b> (LMCache f22dec28 shipped in the ATOM image + PR #2, all four changes, no model, 4×MI355X, 2 runs):</p>
+<p><b>Server-only benchmark</b> (LMCache f22dec28 shipped in the ATOM image + PR #2, all three changes, no model, 4×MI355X, 2 runs):</p>
 <div class="kpis">
-  <div class="kpi"><div class="t">Single conversation store / retrieve p50</div><div class="v">97/614 → 38/159 ms</div><div class="d">−61 % / −74 %</div></div>
-  <div class="kpi"><div class="t">16 × 64k / 32 × 32k arriving at once, makespan</div><div class="v">3.21/3.95 → 0.86/1.11 s</div><div class="d">−73 % / −72 %</div></div>
-  <div class="kpi"><div class="t">Retrieve p90 with many conversations</div><div class="v">1.53 → 0.33 s</div><div class="d">−79 %</div></div>
+  <div class="kpi"><div class="t">Single conversation store / retrieve p50</div><div class="v">97/614 → 46/204 ms</div><div class="d">−53 % / −67 %</div></div>
+  <div class="kpi"><div class="t">16 × 64k / 32 × 32k arriving at once, makespan</div><div class="v">3.21/3.95 → 0.94/1.25 s</div><div class="d">−71 % / −68 %</div></div>
+  <div class="kpi"><div class="t">Retrieve p90 with many conversations</div><div class="v">1.53 → 0.36 s</div><div class="d">−76 %</div></div>
 </div>
 
-<h2>1. Overview: stock vs all four changes</h2>
-<p>Example: a 153,600-token prompt at its last prefill step; 4 ranks send a store at the same time, while another new request sends a lookup. CPU work is drawn at measured scale: decoding a request that carries the whole token prefix 2.4 ms, hashing the whole prompt 2.6 ms, building 2,400 ObjectKeys 1.7 ms (0.44 ms batched), handler about 3 ms; a 383 MB copy is estimated at 20 ms.</p>
+<h2>1. Overview: stock vs all three</h2>
+<p>Example: a 153,600-token prompt at its last prefill step; 4 ranks send a store at the same time, while another new request sends a lookup. CPU work is drawn at measured scale: decoding a request that carries the whole token prefix 2.4 ms, hashing the whole prompt 2.6 ms, building 2,400 ObjectKeys 1.7 ms, handler about 3 ms; a 383 MB copy is estimated at 20 ms.</p>
 <div class="legend">
   <span><i style="background:var(--s2)"></i>Decoding whole token prefixes (holds the GIL)</span>
   <span><i style="background:var(--s4)"></i>Hashing the whole prompt / building keys one by one</span>
@@ -100,10 +99,10 @@ a{color:var(--s1)}
   <span><i style="background:transparent;border:1px dashed var(--muted)"></i>Queued, GPU idle</span>
   <span><i style="background:var(--gpu)"></i>GPU copy</span>
 </div>
-<div class="card" style="padding:8px 10px"><svg id="ovr" class="chart" viewBox="0 0 1000 560" role="img" aria-label="Server timelines, stock vs all four changes"></svg></div>
+<div class="card" style="padding:8px 10px"><svg id="ovr" class="chart" viewBox="0 0 1000 560" role="img" aria-label="Server timelines: stock vs all three"></svg></div>
 <ul>
 <li><b>Stock</b>: the ZMQ thread first decodes the whole token prefix of each of the 5 requests, one by one (about 12 ms in total, holding the GIL); the only store/retrieve thread, after handling one rank, is stuck in a destroy until that GPU's copy is done, so the copies of the 4 GPUs run one after another and all finish only after about 94 ms; the lookup thread also re-hashes the whole prompt and builds 2,400 keys one by one.</li>
-<li><b>All four</b>: requests carry only chunk hashes, so decoding costs almost nothing (change 2); the lookup thread no longer hashes and builds keys in bulk (changes 2 and 3); 4 threads each own one rank (change 4) and are no longer stuck in destroys (change 1); everything finishes in about 23 ms.</li>
+<li><b>All three</b>: requests carry only chunk hashes, so decoding costs almost nothing and the lookup thread no longer hashes (change 2); 4 threads each serve one rank (change 3) and no longer block on destroy after handling (change 1); everything finishes in about 23 ms.</li>
 </ul>
 
 <h2>2. Background: what happens in one store / retrieve</h2>
@@ -196,26 +195,13 @@ a{color:var(--s1)}
 <li>Client and server hashing rules are now coupled; the server checks the algorithm and rejects a mismatch.</li>
 </ul>
 
-<h2>5. Change 3: batched ObjectKey construction</h2>
-<p>A lookup of a 153,600-token (600-chunk) prompt under TP4 builds <b>2,400 ObjectKeys</b> (600 chunks × 4 ranks). Each goes through a frozen dataclass <code>__init__</code>, and <code>__post_init__</code> checks whether the model name contains <code>@</code>, whether the group is negative, and whether the salt has forbidden characters or is too long — <b>all 2,400 checks are on the same model name and the same salt</b>. free_lookup_locks and end_session do it all again.</p>
-<div class="grid2">
-  <div class="card"><b>Time to build 2,400 ObjectKeys (ms)</b><svg id="key" class="chart" viewBox="0 0 500 140" role="img" aria-label="ObjectKey construction time"></svg></div>
-  <div class="card"><b>The change</b>
-    <ul>
-      <li>Fields shared by one call (model name, group, salt) are <b>validated once</b>, then filled in bulk, without calling the dataclass constructor for each key.</li>
-      <li>Keys built in bulk equal the dataclass-built ones and hash the same (unit tests).</li>
-      <li>On its own the gain is small (lookup execution about −7%), but together with change 2 it brings down the CPU time of lookup / free_lookup_locks / end_session.</li>
-    </ul>
-  </div>
-</div>
-
-<h2>6. Change 4: <code>--max-gpu-workers 4</code></h2>
-<h3>6.1 Problem: 4 ranks in one queue</h3>
+<h2>5. Change 3: <code>--max-gpu-workers 4</code></h2>
+<h3>5.1 Problem: 4 ranks in one queue</h3>
 <p>The LMCache server handles store/retrieve with <code>--max-gpu-workers</code> threads, <b>1 by default</b>. Each rank gets a thread on its first request, and all its later requests go to that thread in order. ATOM TP4 has 4 ranks and there is only 1 thread, so they all share it. The server log says so:</p>
 <pre>LMCache WARNING: AffinityThreadPool: affinity_key=... wrapped onto worker slot 0 (only 1 workers),
     so it shares a thread with an earlier key and their tasks are serialized.</pre>
 <p>In the real service's server trace, retrieve <b>queues</b> on the server for a median of 0.65–0.86 s, while it <b>executes</b> in only 18 ms.</p>
-<h3>6.2 The fix, and why it goes with the event pool</h3>
+<h3>5.2 The fix, and why it goes with the event pool</h3>
 <ul>
 <li>Set the thread count to the number of ranks (4 for TP4): one thread per rank, so the 4 GPUs' requests are handled in parallel. Requests of the same rank are still handled one after another, so more threads do not help; when several ATOM instances share one server, set it to the total number of clients.</li>
 <li>With 4 threads alone, each thread still “does one job, then waits” (stuck in the destroy); with the event pool it takes the next job right away. Below: all 4 threads on, and <b>the same rank sends 3 requests in a row</b>:</li>
@@ -228,11 +214,11 @@ a{color:var(--s1)}
 </div>
 <div class="card" style="padding:8px 10px"><svg id="cmp4" class="chart" viewBox="0 0 1000 260" role="img" aria-label="4 threads with and without the event pool"></svg></div>
 
-<h2>7. Companion fix: avoiding a GPU hang with mono</h2>
+<h2>6. Companion fix: avoiding a GPU hang with mono</h2>
 <div class="card" style="border-left:4px solid var(--bad)">
 <p><b>In one sentence</b>: on ROCm 7.2, the server's GPU-side wait on ATOM's IPC event (①) actually launches a <b>polling kernel</b> with a single thread. ATOM's mono kernels need all 256 CTAs <b>co-resident</b> (one per CU) and spin-wait on each other. If the polling kernel takes a CU's slot first, that mono CTA cannot get in, while the signal the polling kernel waits for is only written after mono finishes — <b>each waits for the other and the GPU hangs</b>. The fix: <b>never wait on the GPU for an event that has not fired</b>.</p>
 </div>
-<h3>7.1 Why it hangs</h3>
+<h3>6.1 Why it hangs</h3>
 <ul>
 <li>A ROCm 7.2 IPC event is a signal slot in shared memory. The server's <code>stream.wait_event</code> → <code>ROCCLR_COMMAND_STREAM_WAIT_VALUE</code>; by default (<code>GPU_STREAMOPS_CP_WAIT=false</code>) rocclr runs a <b>one-work-item blit kernel, <code>streamOpsWait</code></b>, that keeps reading that memory until the value becomes 0.</li>
 <li>ATOM mono (<code>ATOM_MONO_ENABLE</code> is on by default; DSV4, GLM-5.2 and MiniMax-M3 all have it): <code>mono/config.py</code> says “one CTA per CU, all co-resident”; the CTAs spin-wait on each other, which relies on all of them being on the GPU at once.</li>
@@ -247,7 +233,7 @@ a{color:var(--s1)}
 </div>
 <div class="card" style="padding:8px 10px"><svg id="mono" class="chart" viewBox="0 0 1000 520" role="img" aria-label="Mono deadlocking with the polling kernel, and after the fix"></svg></div>
 
-<h3>7.2 The fix: two layers, both off by default</h3>
+<h3>6.2 The fix: two layers, both off by default</h3>
 <table>
 <tr><th>Switch</th><th>Where</th><th>What it does</th></tr>
 <tr><td><code>LMCACHE_MP_SUBMIT_AFTER_PRODUCER=1</code></td><td>Client (ATOM adapter)</td><td>Store/retrieve requests are handed to a background thread, which polls ① on the CPU (<code>query()</code> only reads host memory) and sends each request once ① has fired; <code>submit</code> returns a future at once that reports not-done until then. ATOM's calling thread never blocks.</td></tr>
@@ -259,7 +245,7 @@ a{color:var(--s1)}
 <li>The root fix is in ROCm: develop has merged <a href="https://github.com/ROCm/rocm-systems/pull/5575">#5575</a>, which uses ROCr IPC signals waited on by the CP, with no polling kernel; it is not in 7.2 yet.</li>
 </ul>
 
-<h3>7.3 Verification</h3>
+<h3>6.3 Verification</h3>
 <p class="sub">Minimal reproduction <code>benchmarks/mp_event_pool/mono_hang_repro.py</code>: one MI355X, ROCm 7.2.4, two processes. In each iteration the “engine” keeps its stream busy for a while, queues a persistent kernel whose CTAs must all be co-resident and synchronize through a grid barrier, records ① and sends the handle at once; the “server” queues a copy after ① in one of three ways.</p>
 <table>
 <tr><th>Persistent kernel fills</th><th class="num">Stock: the server waits on the GPU</th><th class="num">The server waits on the CPU</th><th class="num">The client sends after ① fires</th></tr>
@@ -274,83 +260,81 @@ a{color:var(--s1)}
 <tr><td>Store submit time on ATOM's calling thread</td><td class="num">4.4 ms</td><td class="num"><b>0.75 ms</b> (sending moved to a background thread)</td></tr>
 </table>
 
-<h2>8. Results</h2>
-<h3>8.1 Real service: the first three changes (event pool + token hashing + batched keys)</h3>
-<p class="sub">10-15/16, MI355X GPUs 0–3, rocm/atom-dev nightly 2026-10-14 (ATOM 6e9b3e1c5, ROCm 7.2.4, LMCache f22dec28), MiniMax-M3-MXFP4 TP4 + EAGLE3, aiperf agentx at concurrency 48 for 1200 s; server <code>--max-gpu-workers 1</code>, <code>--eviction-ratio 0.01</code>. Stock 3 runs, all three changes 3 runs.</p>
+<h2>7. Results</h2>
+<h3>7.1 Real service: changes stacked one by one</h3>
+<p class="sub">11-01, GPUs 4–7 of one 8×MI355X node, image rocm/atom-dev (built 10-28: ATOM 646da00fe, M3 mono on by default; ROCm 7.2.4; LMCache f22dec28), MiniMax-M3-MXFP4 TP4 + EAGLE3, InferenceX harness (AgentX) at concurrency 48 for 1800 s; MP server L1 1028 GB pre-allocated at startup, <code>--eviction-ratio 0.01</code>; the all-three arm also has the companion fix from section 6 on. 1 run per arm; differences of 1–2 % between neighbouring arms are within noise.</p>
 <div class="legend"><span><i style="background:var(--s2)"></i>Stock</span><span><i style="background:var(--s1)"></i>All three</span></div>
 <div class="card"><b>Server-side and read-back latency (ms, lower is better)</b><svg id="e2e" class="chart" viewBox="0 0 1000 300" role="img" aria-label="Real-service server metrics"></svg></div>
 <table>
-<tr><th></th><th class="num">Stock</th><th class="num">All three</th><th class="num">Change</th></tr>
-<tr><td>TTFT p90</td><td class="num">1,911 (1,875–1,946) ms</td><td class="num"><b>1,525</b> (1,475–1,579) ms</td><td class="num">−20 %</td></tr>
-<tr><td>TTFT mean</td><td class="num">1,071 ms</td><td class="num"><b>997</b> ms</td><td class="num">−7 % (ranges overlap)</td></tr>
-<tr><td>KV read back from LMCache, p50 / p99</td><td class="num">855 ms / 9.7 s</td><td class="num"><b>215 ms / 2.8 s</b></td><td class="num">−75 % / −71 %</td></tr>
-<tr><td>Read-backs over 1 s (per run)</td><td class="num">67</td><td class="num"><b>19</b></td><td class="num">−72 %</td></tr>
-<tr><td>Server store execution mean / queueing mean</td><td class="num">30.7 / 290 ms</td><td class="num"><b>3.0 / 8.6</b> ms</td><td class="num">−90 % / −97 %</td></tr>
-<tr><td>Server retrieve queueing p50 / execution mean</td><td class="num">360 / 119 ms</td><td class="num"><b>16 / 18</b> ms</td><td class="num">−96 % / −85 %</td></tr>
-<tr><td>Server lookup execution mean</td><td class="num">51.4 ms</td><td class="num"><b>20.9</b> ms</td><td class="num">−59 %</td></tr>
-<tr><td>Store/retrieve thread busy</td><td class="num">45 %</td><td class="num"><b>4.6 %</b></td><td class="num"></td></tr>
-<tr><td>GIL-holding samples in 60 s</td><td class="num">2,746</td><td class="num"><b>671</b></td><td class="num">−76 %</td></tr>
-<tr><td>End-to-end latency mean / output tokens/s</td><td class="num">10.4 s / 1,505</td><td class="num">10.3 s / 1,507</td><td class="num">Unchanged</td></tr>
+<tr><th></th><th class="num">Throughput tok/s/GPU</th><th class="num">TTFT p90 ms</th><th class="num">TTFT mean ms</th><th class="num">KV read-back p50 ms</th><th class="num">ATOM queueing mean ms</th><th class="num">Server store queueing / run ms</th><th class="num">Server retrieve queueing p50 / run ms</th><th class="num">Server GIL samples / 60 s</th></tr>
+<tr><td>In-process LMCache</td><td class="num">62,110</td><td class="num">1,407</td><td class="num">862</td><td class="num">284</td><td class="num">192</td><td class="num">– / –</td><td class="num">– / –</td><td class="num">–</td></tr>
+<tr><td>MP stock</td><td class="num">57,835</td><td class="num">2,146</td><td class="num">1,104</td><td class="num">575</td><td class="num">379</td><td class="num">355.2 / 24.4</td><td class="num">166.5 / 108.6</td><td class="num">879</td></tr>
+<tr><td>+ event pool</td><td class="num">60,728</td><td class="num">1,698</td><td class="num">1,013</td><td class="num">261</td><td class="num">315</td><td class="num">43.6 / 8.4</td><td class="num">40.1 / 26.8</td><td class="num">908</td></tr>
+<tr><td>+ client hashing</td><td class="num">59,966</td><td class="num">1,853</td><td class="num">1,084</td><td class="num">240</td><td class="num">332</td><td class="num">39.3 / 2.7</td><td class="num">11.0 / 13.8</td><td class="num">315</td></tr>
+<tr><td>+ 4 threads + companion fix (all three)</td><td class="num">61,379</td><td class="num">1,518</td><td class="num">857</td><td class="num">197</td><td class="num">253</td><td class="num">4.5 / 8.0</td><td class="num">0.2 / 29.9</td><td class="num">384</td></tr>
 </table>
+<ul>
+<li>MP stock is 6.9 % slower than in-process; with all three changes the gap is 1.2 %. The end-to-end gain comes mostly from the event pool (+5.0 % on its own); client hashing and 4 threads push the server-side cost down to a few milliseconds, but the server is no longer the bottleneck, so their end-to-end increments are not visible.</li>
+<li>The remaining gap is on the ATOM side: with all three, ATOM scheduler queueing averages 253 ms, versus 192 ms in-process.</li>
+</ul>
 
-<h3>8.2 Server-only benchmark: each change and all together</h3>
+<h3>7.2 Server-only benchmark: each change and all three</h3>
 <p>One server, no model, driven by ATOM's own LMCache adapter classes: 4 worker processes register MiniMax-M3-shaped page views on 4 GPUs (301 tensors, 23,400 bytes per token per rank), and a 5th process plays ATOM's scheduler. Each conversation turn is: lookup → every rank reads back the prefix → every rank stores the new 16k tokens (the key carries the full prompt) → end_session. L1 is 800 GB, all pinned at startup and never grown; 684 GB are written in total, with no eviction.</p>
-<p class="sub">11-01, GPUs 4–7 of one 8×MI355X node, image rocm/atom-dev (built 10-28, ROCm 7.2.4), LMCache f22dec28 (shipped in the ATOM image) + PR #2; all four changes can be turned on only on this base. 2 runs per arm, interleaved. Sweep: one conversation whose prompt grows from 16k in 16k steps to 524,288 tokens, sequentially; the whole sweep runs twice (fresh tokens each pass) and only the second pass counts; each point is the mean of the 2 runs. For readability the “batched keys only” arm is not drawn; all six arms are in the table. Hover for values.</p>
+<p class="sub">11-01, GPUs 4–7 of one 8×MI355X node, image rocm/atom-dev (built 10-28, ROCm 7.2.4), LMCache f22dec28 (shipped in the ATOM image) + PR #2; all three changes can be turned on only on this base. 2 runs per arm, interleaved. Sweep: one conversation whose prompt grows from 16k in 16k steps to 524,288 tokens, sequentially; the whole sweep runs twice (fresh tokens each pass) and only the second pass counts; each point is the mean of the 2 runs. Hover for values.</p>
 <div class="legend">
-  <span><i style="background:var(--s2)"></i>Stock</span><span><i style="background:var(--s1)"></i>Event pool only</span><span><i style="background:var(--s3)"></i>Client hashing only</span><span><i style="background:var(--s4)"></i>All three</span><span><i style="background:var(--s5)"></i>All four (three + 4 threads)</span>
+  <span><i style="background:var(--s2)"></i>Stock</span><span><i style="background:var(--s1)"></i>Event pool only</span><span><i style="background:var(--s3)"></i>Client hashing only</span><span><i style="background:var(--good)"></i>All three (event pool + client hashing + 4 threads)</span>
 </div>
 <div class="card"><b>Retrieve latency, all 4 ranks done (ms)</b><svg id="lr" class="chart" viewBox="0 0 1000 320" role="img" aria-label="Retrieve latency vs prompt length"></svg><p class="sub">X axis: prompt tokens (retrieve covers the whole prefix except the last 16k).</p></div>
 <div class="card"><b>Store latency, 16k new tokens, all 4 ranks done (ms)</b><svg id="ls" class="chart" viewBox="0 0 1000 320" role="img" aria-label="Store latency vs prompt length"></svg><p class="sub">X axis: prompt tokens carried in the key.</p></div>
 <div class="card"><b>Whole turn: lookup + retrieve + store (ms)</b><svg id="lt" class="chart" viewBox="0 0 1000 320" role="img" aria-label="Whole-turn latency vs prompt length"></svg><p class="sub">X axis: prompt tokens.</p></div>
 <p><b>All metrics</b> (mean of 2 runs, range of the runs in parentheses):</p>
 <table>
-<tr><th></th><th class="num">Stock</th><th class="num">Event pool only</th><th class="num">Client hashing only</th><th class="num">Batched keys only</th><th class="num">All three</th><th class="num">All four</th></tr>
-<tr><td>Single conversation store p50 (ms)</td><td class="num">97 (96–99)</td><td class="num">69 (69–69)</td><td class="num">63 (63–64)</td><td class="num">99 (95–103)</td><td class="num">32 (32–32)</td><td class="num"><b>38 (37–39)</b></td></tr>
-<tr><td>Single conversation retrieve p50 (ms)</td><td class="num">614 (613–615)</td><td class="num">235 (234–236)</td><td class="num">574 (572–576)</td><td class="num">617 (616–619)</td><td class="num">196 (195–197)</td><td class="num"><b>159 (158–160)</b></td></tr>
-<tr><td>Single conversation lookup p50 (ms)</td><td class="num">30.4 (29.8–31.0)</td><td class="num">32.2 (30.0–34.3)</td><td class="num">17.4 (17.1–17.6)</td><td class="num">34.0 (34.0–34.1)</td><td class="num">16.7 (16.6–16.9)</td><td class="num"><b>15.6 (15.3–15.9)</b></td></tr>
-<tr><td>16 × 64k arriving at once, makespan (s)</td><td class="num">3.21 (3.20–3.23)</td><td class="num">1.31 (1.21–1.41)</td><td class="num">3.15 (3.11–3.18)</td><td class="num">3.29 (3.24–3.34)</td><td class="num">0.93 (0.81–1.04)</td><td class="num"><b>0.86 (0.83–0.89)</b></td></tr>
-<tr><td>32 × 32k arriving at once, makespan (s)</td><td class="num">3.95 (3.92–3.97)</td><td class="num">1.75 (1.71–1.78)</td><td class="num">3.75 (3.71–3.78)</td><td class="num">4.11 (4.01–4.20)</td><td class="num">1.37 (1.36–1.37)</td><td class="num"><b>1.11 (1.09–1.13)</b></td></tr>
-<tr><td>Many conversations, store p50 / p90 (ms)</td><td class="num">1652 / 1901</td><td class="num">562 / 887</td><td class="num">1464 / 1791</td><td class="num">1722 / 2168</td><td class="num">388 / 549</td><td class="num"><b>341 / 542</b></td></tr>
-<tr><td>Many conversations, retrieve p50 / p90 (ms)</td><td class="num">912 / 1534</td><td class="num">303 / 448</td><td class="num">1194 / 1704</td><td class="num">913 / 1569</td><td class="num">202 / 337</td><td class="num"><b>155 / 328</b></td></tr>
-<tr><td>Failed ops / burst hits (144 per run)</td><td class="num">0 / 144, 144</td><td class="num">0 / 144, 144</td><td class="num">0 / 144, 144</td><td class="num">0 / 144, 144</td><td class="num">0 / 144, 144</td><td class="num">0 / 144, 144</td></tr>
+<tr><th></th><th class="num">Stock</th><th class="num">Event pool only</th><th class="num">Client hashing only</th><th class="num">All three</th></tr>
+<tr><td>Single conversation store p50 (ms)</td><td class="num">97 (96–99)</td><td class="num">69 (69–69)</td><td class="num">63 (63–64)</td><td class="num">46 (45–46)</td></tr>
+<tr><td>Single conversation retrieve p50 (ms)</td><td class="num">614 (613–615)</td><td class="num">235 (234–236)</td><td class="num">574 (572–576)</td><td class="num">204 (202–206)</td></tr>
+<tr><td>Single conversation lookup p50 (ms)</td><td class="num">30.4 (29.8–31.0)</td><td class="num">32.2 (30.0–34.3)</td><td class="num">17.4 (17.1–17.6)</td><td class="num">18.5 (17.4–19.6)</td></tr>
+<tr><td>16 × 64k arriving at once, makespan (s)</td><td class="num">3.21 (3.20–3.23)</td><td class="num">1.31 (1.21–1.41)</td><td class="num">3.15 (3.11–3.18)</td><td class="num">0.94 (0.93–0.94)</td></tr>
+<tr><td>32 × 32k arriving at once, makespan (s)</td><td class="num">3.95 (3.92–3.97)</td><td class="num">1.75 (1.71–1.78)</td><td class="num">3.75 (3.71–3.78)</td><td class="num">1.25 (1.24–1.26)</td></tr>
+<tr><td>Many conversations, store p50 / p90 (ms)</td><td class="num">1652 / 1901</td><td class="num">562 / 887</td><td class="num">1464 / 1791</td><td class="num">404 / 733</td></tr>
+<tr><td>Many conversations, retrieve p50 / p90 (ms)</td><td class="num">912 / 1534</td><td class="num">303 / 448</td><td class="num">1194 / 1704</td><td class="num">189 / 361</td></tr>
+<tr><td>Failed ops / burst hits (144 per run)</td><td class="num">0 / 144, 144</td><td class="num">0 / 144, 144</td><td class="num">0 / 144, 144</td><td class="num">0 / 144, 144</td></tr>
 </table>
 <ul>
 <li><b>The event pool is the largest single gain</b>: retrieve grows far more slowly with the prompt, and the burst makespan drops to about 40 % of stock.</li>
 <li><b>Client hashing mainly saves store and lookup</b>: store no longer slows down as the prompt grows, and lookup p50 goes from 30 to 17 ms; it does little for retrieve, whose cost is mostly the copy and the destroy wait.</li>
-<li><b>Batched keys alone make no visible difference</b> (within noise); their role is to bring down the CPU time of lookup / end_session together with change 2.</li>
-<li><b>All four vs all three</b>: retrieve (196 → 159 ms) and bursts (0.93/1.37 → 0.86/1.11 s) improve; single-conversation store is slightly slower (32 → 38 ms, in both runs), a small absolute difference.</li>
+<li><b>All three</b>: single-conversation store / retrieve 97/614 → 46/204 ms; bursts finish in about 30 % of the stock time. The 3 spikes on the store curve (about 140–220 ms) are single-point outliers from run 1, normal in run 2 at the same points (other arms show such outliers too); the upturn at 512k has the same cause.</li>
 </ul>
 <p class="note">These numbers were measured with L1 never growing during the run. Earlier benchmarks (with L1 growing during the run) were disturbed by stalls from pinning memory, read high, and are no longer cited.</p>
 
-<h2>9. How to use</h2>
+<h2>8. How to use</h2>
 <pre># ATOM (LMCache client) side
 export LMCACHE_MP_POOLED_EVENTS=1   # change 1: event pool
 export LMCACHE_MP_CLIENT_HASH=1     # change 2: client chunk hashing (needs a blake3 server)
 
 # LMCache server side
-export LMCACHE_MP_FAST_KEYS=1       # change 3: batched ObjectKey construction
-lmcache server ... --max-gpu-workers 4   # change 4: one thread per rank (TP4 → 4)
+lmcache server ... --max-gpu-workers 4   # change 3: one thread per rank (TP4 → 4)
 
 # Companion fix: required with mono (avoids GPU hangs)
 export LMCACHE_MP_SUBMIT_AFTER_PRODUCER=1   # client: send after ① has fired
 export LMCACHE_MP_HOST_WAIT_PRODUCER=1      # server: never wait on the GPU for an unfinished ①</pre>
 <ul>
-<li>The first three are off by default and must be turned on; the new fields all have defaults, so old and new clients and servers interoperate.</li>
-<li>Code: all three are in <a href="https://github.com/yhl-amd/LMCache/pull/2">#2</a> (f22dec28); the event pool is ported to dev in <a href="https://github.com/yhl-amd/LMCache/pull/3">#3</a>.</li>
+<li>The first two changes and the companion fix are off by default and must be turned on; the new fields all have defaults, so old and new clients and servers interoperate.</li>
+<li>Code: the event pool and client hashing are in <a href="https://github.com/yhl-amd/LMCache/pull/2">#2</a> (f22dec28); the event pool and the companion fix are ported to dev in <a href="https://github.com/yhl-amd/LMCache/pull/3">#3</a>.</li>
 <li><b>Give L1 headroom</b>: faster handling means more writes in flight; L1 grows lazily by default, and when growth lags behind it triggers eviction early. <code>--l1-init-size-gb</code> grows it enough at startup.</li>
 </ul>
 
-<h2>10. Caveats</h2>
+<h2>9. Caveats</h2>
 <ul>
-<li><b>Turn on the companion fix with mono</b> (section 7): otherwise, on ROCm 7.2, the server's polling kernel can deadlock with mono and hang the GPU.</li>
+<li><b>Turn on the companion fix with mono</b> (section 6): otherwise, on ROCm 7.2, the server's polling kernel can deadlock with mono and hang the GPU.</li>
 <li><b>L1 growth blocks HIP calls</b>: L1 grows lazily by default, pinning 10 GB at a time with <code>hipHostRegister</code>; for the few seconds of each pin, the server's IPC event records and the IPC handle opens at registration are blocked, showing up as ~10 s stalls, registration timeouts and instances reaped by the server (<code>Reaped GPU instance</code>). In production, either grow L1 enough at startup with <code>--l1-init-size-gb</code> or accept occasional stalls.</li>
 <li><b>Heartbeat / registration stalls</b>: ATOM's docs currently say not to raise the GPU worker count (per-thread lazy initialization once stalled the server past the client heartbeat). In our benchmarks registration stalls happened with both 1 and 4 threads, and the trigger is not understood; before going to production, check the server log for <code>Reaped GPU instance</code> and registration timeouts.</li>
 <li><b>The event pool matters on ROCm</b>: on CUDA destroying an event does not synchronize, so the gain is much smaller; once the ROCm 7.2 backport (#11529) lands, the destroy stall itself goes away.</li>
 <li><b>Token hashing moves the hashing cost onto the client's calling thread</b> (about 4.7 ms for a new 128k request); better to hash once in the scheduler and pass the hashes down.</li>
 <li>Real-service TTFT mean and p99 vary a lot, so per-change end-to-end numbers are indicative only; server-side metrics change by large factors and repeat well.</li>
+<li><b>Tried and dropped: batched ObjectKey construction</b> (<code>LMCACHE_MP_FAST_KEYS</code>: validate the shared fields once per call and fill keys in bulk). In a microbenchmark it cuts building 2,400 keys from 1.7 ms to 0.44 ms; in the server benchmark, on top of the other three, single-conversation retrieve is about 20 % faster (204 → 159 ms) and store 46 → 38 ms; but end-to-end throughput shows no difference (the server is no longer the bottleneck), and bypassing the constructor gives every key its own instance dict (48 → 232 B, twice the gen-0 GC runs), with millions of keys resident in the L1 index. On balance it was removed from PR #2 (a672cbd).</li>
 </ul>
 
-<h2>11. Reproduction</h2>
+<h2>10. Reproduction</h2>
 <p>All scripts are in <code>benchmarks/mp_event_pool/</code> of <a href="https://github.com/yhl-amd/LMCache/pull/3">#3</a>. One 4-GPU MI300/MI350-class node with ROCm 7.2.x is enough; the single-GPU and two-process tests need only torch.</p>
 <table>
 <tr><th>What it checks</th><th>Script</th><th>Conditions / parameters</th><th>Our result</th></tr>
@@ -359,7 +343,7 @@ export LMCACHE_MP_HOST_WAIT_PRODUCER=1      # server: never wait on the GPU for 
 <tr><td>Event reuse is safe (no early release, no false completion)</td><td><code>event_reuse_check.py 400 31</code></td><td>Two processes; replace after 31 records / reuse forever with query only</td><td>400 rounds, 0 errors</td></tr>
 <tr><td>The ROCm 7.2 32-record limit (negative control)</td><td><code>event_reuse_check.py 60 40</code></td><td>40 records per event</td><td>The 33rd wait fails with <code>hipErrorInvalidValue</code></td></tr>
 <tr><td>Persistent kernel (mono) + GPU-side wait hangs; the two layers avoid it</td><td><code>mono_hang_repro.py</code></td><td><code>--mode stream|host|gate</code>; <code>--block</code> and <code>--blocks-per-cu</code> fill every CU or leave room</td><td>Full + stream: hangs at iteration 2; host / gate: 100 iterations OK; with room left: no hang</td></tr>
-<tr><td>Server performance of each change and all together</td><td><code>run_srvbench.sh</code> + <code>srvbench.py</code> + <code>aggregate.py</code> + <code>sweep_curves.py</code></td><td>Sweep length <code>SB_T_SWEEP</code> (32 → 512k); bursts <code>SB_BURSTS</code> (16×64k, 32×32k) × <code>SB_BURST_R</code>; L1 <code>SB_L1</code> = <code>SB_L1_INIT</code> (no growth); switches below; detailed steps in 11.1</td><td>Section 8.2</td></tr>
+<tr><td>Server performance, each change and all three</td><td><code>run_srvbench.sh</code> + <code>srvbench.py</code> + <code>aggregate.py</code> + <code>sweep_curves.py</code></td><td>Sweep length <code>SB_T_SWEEP</code> (32 → 512k); bursts <code>SB_BURSTS</code> (16×64k, 32×32k) × <code>SB_BURST_R</code>; L1 <code>SB_L1</code> = <code>SB_L1_INIT</code> (no growth); switches below; detailed steps in 10.1</td><td>Section 7.2</td></tr>
 </table>
 <pre># single GPU / two processes (torch only)
 python destroy_probe.py --trials 30 --busy-ms 40 --consumer 1
@@ -375,29 +359,27 @@ P=/w/site-pool-f22
 bash run_srvbench.sh runs/stock@r1 0                                                  # stock
 PYTHONPATH=$P bash run_srvbench.sh runs/pool@r1 1                                     # event pool only
 PYTHONPATH=$P LMCACHE_MP_CLIENT_HASH=1 bash run_srvbench.sh runs/hash@r1 0            # client hashing only
-PYTHONPATH=$P LMCACHE_MP_FAST_KEYS=1 bash run_srvbench.sh runs/fk@r1 0                # batched keys only
-PYTHONPATH=$P LMCACHE_MP_CLIENT_HASH=1 LMCACHE_MP_FAST_KEYS=1 bash run_srvbench.sh runs/all3@r1 1                     # all three
-PYTHONPATH=$P LMCACHE_MP_CLIENT_HASH=1 LMCACHE_MP_FAST_KEYS=1 bash run_srvbench.sh runs/all4@r1 1 --max-gpu-workers 4 # all four
-python aggregate.py runs stock pool hash fk all3 all4      # summary table (section 8.2)
-python sweep_curves.py runs stock pool hash fk all3 all4   # sweep curves (the three charts in section 8.2)</pre>
-<h3>11.1 Detailed sweep reproduction steps</h3>
+PYTHONPATH=$P LMCACHE_MP_CLIENT_HASH=1 bash run_srvbench.sh runs/final3@r1 1 --max-gpu-workers 4 # all three
+python aggregate.py runs stock pool hash final3      # summary table (section 7.2)
+python sweep_curves.py runs stock pool hash final3   # sweep curves (the three charts in section 7.2)</pre>
+<h3>10.1 Detailed sweep reproduction steps</h3>
 <ol>
 <li><b>Environment</b>: one 4-GPU MI300/MI350-class node; image <code>rocm/atom-dev</code> (we used latest built 10-28: ROCm 7.2.4, torch 2.10, with LMCache f22dec28 included).
 <pre>docker run -d --init --name lmc_sweep --network host --ipc host --device /dev/kfd --device /dev/dri \
   --group-add video --security-opt seccomp=unconfined -e HIP_VISIBLE_DEVICES=4,5,6,7 \
   -v /path/to/work:/w rocm/atom-dev:latest sleep infinity
 docker exec -it lmc_sweep bash</pre></li>
-<li><b>Prepare two LMCache trees</b>: stock is the one in the image; the patched one = a copy of the image's, with the 9 Python files changed by PR #2 copied over it (the C++ extensions are unchanged).
+<li><b>Prepare two LMCache trees</b>: stock is the one in the image; the patched one = a copy of the image's, with the 8 Python files changed by PR #2 copied over it (the C++ extensions are unchanged).
 <pre>git clone https://github.com/yhl-amd/LMCache.git /w/LMCache &amp;&amp; cd /w/LMCache
 git checkout perf/mp-pooled-events
 mkdir -p /w/site-pool-f22 &amp;&amp; cp -a /opt/venv/lib/python3.12/site-packages/lmcache /w/site-pool-f22/
 git diff --name-only f22dec2832124ea4ffeb464553b819a6369d4a30 HEAD -- lmcache | xargs -I{} cp --parents {} /w/site-pool-f22/
 PYTHONPATH=/w/site-pool-f22 python -c "import lmcache.integration.atom.multi_process_adapter as m; print(m._POOLED_EVENTS)"   # False = switches off by default</pre></li>
 <li><b>What each sweep turn does</b> (<code>srvbench.py ... sweep</code>): start 4 rank processes (each registers MiniMax-M3-shaped page views on its GPU) and 1 scheduler process, with a single conversation; turn t has prompt length P = t × 16k: lookup(P) → each of the 4 ranks retrieves [0, P − 16k) → each of the 4 ranks stores the new [P − 16k, P) → end_session. With <code>SB_T_SWEEP=32</code>, P goes from 16k to 524,288. The whole sweep runs twice (pass0 warm-up, pass1 measured) with fresh random tokens each pass; only pass1 counts.</li>
-<li><b>Run</b>: run the 6 arms with the commands above, 2 rounds each, interleaved (about 5 minutes per arm, including about 2 minutes to pin 800 GB of L1 at startup); after the sweep the script runs the bursts.</li>
+<li><b>Run</b>: run the 4 arms with the commands above, 2 rounds each, interleaved (about 5 minutes per arm, including about 2 minutes to pin 800 GB of L1 at startup); after the sweep the script runs the bursts.</li>
 <li><b>Check that a run was not disturbed</b>: <code>server.log</code> has 0 lines of <code>triggering eviction</code>, 0 of <code>Expanded</code> (L1 did not grow) and 0 of <code>Reaped GPU instance</code>; <code>summary.json</code> shows 144 burst retrieves and 0 failed ops. If any check fails, rerun that round.</li>
-<li><b>Curves</b>: each record in <code>sweep.json</code> is <code>[kind, prompt_tokens, seconds, tag]</code>, with kinds lookup / retrieve / store / turn (a whole turn) plus *_rank_max and *_submit. <code>sweep_curves.py</code> takes pass1, averages each prompt length over the rounds, and writes <code>sweep_curves.json</code> / <code>.csv</code>; the three charts in section 8.2 are drawn from it.
-<pre>python sweep_curves.py runs stock pool hash fk all3 all4 --kinds retrieve,store,turn</pre></li>
+<li><b>Curves</b>: each record in <code>sweep.json</code> is <code>[kind, prompt_tokens, seconds, tag]</code>, with kinds lookup / retrieve / store / turn (a whole turn) plus *_rank_max and *_submit. <code>sweep_curves.py</code> takes pass1, averages each prompt length over the rounds, and writes <code>sweep_curves.json</code> / <code>.csv</code>; the three charts in section 7.2 are drawn from it.
+<pre>python sweep_curves.py runs stock pool hash final3 --kinds retrieve,store,turn</pre></li>
 </ol>
 <p><b>Our measurements</b> (mean of 2 runs, to compare your results against):</p>
 <div class="grid2">
@@ -406,18 +388,14 @@ PYTHONPATH=/w/site-pool-f22 python -c "import lmcache.integration.atom.multi_pro
 <tr><td>Stock</td><td class="num">124</td><td class="num">273</td><td class="num">579</td><td class="num">1179</td></tr>
 <tr><td>Event pool only</td><td class="num">46</td><td class="num">106</td><td class="num">224</td><td class="num">453</td></tr>
 <tr><td>Client hashing only</td><td class="num">117</td><td class="num">254</td><td class="num">535</td><td class="num">1104</td></tr>
-<tr><td>Batched keys only</td><td class="num">129</td><td class="num">277</td><td class="num">583</td><td class="num">1199</td></tr>
-<tr><td>All three</td><td class="num">39</td><td class="num">86</td><td class="num">183</td><td class="num">376</td></tr>
-<tr><td>All four</td><td class="num">33</td><td class="num">71</td><td class="num">150</td><td class="num">306</td></tr>
+<tr><td>All three</td><td class="num">39</td><td class="num">86</td><td class="num">180</td><td class="num">471</td></tr>
 </table>
 <table>
 <tr><th>store (ms)</th><th class="num">64k</th><th class="num">128k</th><th class="num">256k</th><th class="num">512k</th></tr>
 <tr><td>Stock</td><td class="num">71</td><td class="num">78</td><td class="num">96</td><td class="num">130</td></tr>
 <tr><td>Event pool only</td><td class="num">38</td><td class="num">46</td><td class="num">67</td><td class="num">99</td></tr>
 <tr><td>Client hashing only</td><td class="num">62</td><td class="num">61</td><td class="num">64</td><td class="num">66</td></tr>
-<tr><td>Batched keys only</td><td class="num">70</td><td class="num">81</td><td class="num">96</td><td class="num">134</td></tr>
-<tr><td>All three</td><td class="num">29</td><td class="num">30</td><td class="num">32</td><td class="num">39</td></tr>
-<tr><td>All four</td><td class="num">24</td><td class="num">28</td><td class="num">35</td><td class="num">58</td></tr>
+<tr><td>All three</td><td class="num">25</td><td class="num">32</td><td class="num">45</td><td class="num">143</td></tr>
 </table>
 </div>
 <table>
@@ -425,13 +403,11 @@ PYTHONPATH=/w/site-pool-f22 python -c "import lmcache.integration.atom.multi_pro
 <tr><td>Stock</td><td class="num">203</td><td class="num">366</td><td class="num">705</td><td class="num">1443</td></tr>
 <tr><td>Event pool only</td><td class="num">92</td><td class="num">169</td><td class="num">323</td><td class="num">694</td></tr>
 <tr><td>Client hashing only</td><td class="num">184</td><td class="num">324</td><td class="num">616</td><td class="num">1205</td></tr>
-<tr><td>Batched keys only</td><td class="num">207</td><td class="num">374</td><td class="num">712</td><td class="num">1624</td></tr>
-<tr><td>All three</td><td class="num">72</td><td class="num">124</td><td class="num">231</td><td class="num">446</td></tr>
-<tr><td>All four</td><td class="num">61</td><td class="num">107</td><td class="num">200</td><td class="num">393</td></tr>
+<tr><td>All three</td><td class="num">70</td><td class="num">127</td><td class="num">242</td><td class="num">651</td></tr>
 </table>
 
 <p class="note"><b>When benchmarking</b>: ① pin all of L1 at startup and never grow it during the run (<code>SB_L1</code> = <code>SB_L1_INIT</code>, larger than the total data written), otherwise pinning stalls the server for seconds and can even time out registration and get instances reaped; ② check that each run's <code>server.log</code> has no <code>triggering eviction</code> or <code>Reaped GPU instance</code>, and that <code>summary.json</code> shows 144 burst retrieves; ③ ports 5566 and 9090 may be taken by other services on the host, so the script defaults to 15566 and 19788.</p>
-<p class="sub">The per-change comparison of the first three changes in the real service, and the original overhead analysis, are in <a href="../lmcache-mp-overheads/">LMCache MP RPC overheads</a>.</p>
+<p class="sub">An earlier per-change comparison on the real service and the raw overhead analysis are in <a href="../lmcache-mp-overheads/">RPC overheads in LMCache MP mode</a>.</p>
 </div>
 <div id="tip"></div>
 
@@ -440,7 +416,7 @@ const NS="http://www.w3.org/2000/svg", tip=document.getElementById("tip");
 function el(p,t,a,txt){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!==undefined)e.textContent=txt;p.appendChild(e);return e}
 function hover(e,html){e.addEventListener("mousemove",ev=>{tip.style.display="block";tip.innerHTML=html;tip.style.left=(ev.clientX+14)+"px";tip.style.top=(ev.clientY+12)+"px"});e.addEventListener("mouseleave",()=>tip.style.display="none")}
 
-// ---------- overview: original vs all four ----------
+// ---------- overview: original vs all three ----------
 (function(){
   const s=document.getElementById("ovr"), L=160, R=980, X=t=>L+(R-L)*t/100, RH=19;
   function lanes(y0,rows){const ry=i=>y0+24+i*(RH+3);rows.forEach((r,i)=>{el(s,"rect",{x:4,y:ry(i)-2,width:992,height:RH+2,rx:3,fill:"var(--rule2)"});el(s,"text",{x:12,y:ry(i)+RH/2+4,"font-size":12,fill:"var(--ink2)"},r)});return ry}
@@ -466,13 +442,13 @@ function hover(e,html){e.addEventListener("mousemove",ev=>{tip.style.display="bl
   el(s,"text",{x:X(5*D)+8,y:ry(0)+RH/2+4,"font-size":11,fill:"var(--ink2)"},"4 stores + 1 lookup, each decoding whole token prefixes: about 12 ms in total (holding the GIL)");
   el(s,"line",{x1:X(t),y1:y0+20,x2:X(t),y2:ry(6)+RH,stroke:"var(--ink2)","stroke-dasharray":"4 3"});
   // final
-  y0=ry(6)+RH+26; title(y0,"All four: chunk hashes only, batched keys, 4 threads, no destroy stalls","all done in about 23 ms","--good");
+  y0=ry(6)+RH+26; title(y0,"All three: chunk hashes only, 4 threads, no blocking on destroy","all done in about 23 ms","--good");
   ry=lanes(y0,["ZMQ receive thread","thread 0 (rank0)","thread 1 (rank1)","thread 2 (rank2)","thread 3 (rank3)","lookup thread","GPU0 copy","GPU1 copy","GPU2 copy","GPU3 copy"]);
   box(ry,0,0,0.3,"var(--s2)","",null,"5 requests carry only chunk hashes: about 1 µs to decode each key");
   el(s,"text",{x:X(0.3)+8,y:ry(0)+RH/2+4,"font-size":11,fill:"var(--ink2)"},"requests carry only chunk hashes (store: 2 KB); decoding costs almost nothing");
   for(let k=0;k<4;k++){box(ry,1+k,0.3,3.3,"var(--cpu)",`r${k}`,"#fff",`rank${k}: handler about 3 ms, returns right away`);box(ry,6+k,3.3,23.3,"var(--gpu)",`rank${k} copy`,"var(--ink)",`GPU${k} copy about 20 ms`)}
-  box(ry,5,0.3,0.74,"var(--s4)","",null,"lookup: hashes already computed by the client; batched build of 2,400 keys about 0.44 ms");
-  el(s,"text",{x:X(0.74)+8,y:ry(5)+RH/2+4,"font-size":11,fill:"var(--ink2)"},"no re-hashing; batched keys 0.44 ms");
+  box(ry,5,0.3,2.0,"var(--s4)","",null,"lookup: hashes already computed by the client; building 2,400 keys takes about 1.7 ms");
+  el(s,"text",{x:X(2.0)+8,y:ry(5)+RH/2+4,"font-size":11,fill:"var(--ink2)"},"No more hashing; building 2,400 keys 1.7 ms");
   el(s,"line",{x1:X(23.3),y1:y0+20,x2:X(23.3),y2:ry(9)+RH,stroke:"var(--ink2)","stroke-dasharray":"4 3"});
   const yb=ry(9)+RH+16; for(let k=0;k<=100;k+=20)el(s,"text",{x:X(k),y:yb,"font-size":11,fill:"var(--muted)","text-anchor":"middle"},k+" ms");
   s.setAttribute("viewBox",`0 0 1000 ${yb+8}`);
@@ -559,17 +535,6 @@ function hover(e,html){e.addEventListener("mousemove",ev=>{tip.style.display="bl
   panel(PH,"Event pool: re-record events, import each handle once","no destroys: reply at once, next request handled right away","--good",true);
 })();
 
-// ---------- ObjectKey ----------
-(function(){
-  const s=document.getElementById("key"), L=150, R=420, X=v=>L+(R-L)*v/2;
-  [["one dataclass at a time",1.67,"--s2"],["validate once, in bulk",0.44,"--s1"]].forEach((r,i)=>{
-    const y=12+i*44; el(s,"text",{x:L-8,y:y+17,"font-size":13,fill:"var(--ink)","text-anchor":"end"},r[0]);
-    el(s,"rect",{x:L,y:y,width:X(r[1])-L,height:24,rx:4,fill:`var(${r[2]})`});
-    el(s,"text",{x:X(r[1])+6,y:y+17,"font-size":12,fill:"var(--ink)"},r[1]+" ms"+(i?" (−74 %)":""));
-  });
-  [0,0.5,1,1.5,2].forEach(v=>el(s,"text",{x:X(v),y:120,"font-size":11,fill:"var(--muted)","text-anchor":"middle"},v));
-})();
-
 // ---------- 4 threads: with vs without pool ----------
 (function(){
   const s=document.getElementById("cmp4"), L=170, R=980, X=t=>L+(R-L)*t/80, RH=22, H=3, C=20;
@@ -613,7 +578,7 @@ function bars2(id, groups, unit, max, W, labA, labB){
   el(s,"line",{x1:L,y1:top,x2:L,y2:H,stroke:"var(--muted)"});
   s.setAttribute("viewBox",`0 0 ${W} ${H+22}`);
 }
-bars2("e2e",[["KV read-back p50",855,215,"745–947","191–242"],["retrieve queueing p50",360,16,"278–431","13–18"],["retrieve execution mean",119,18,"99–132","17–21"],["lookup execution mean",51.4,20.9,"50.0–52.2","20.1–21.9"],["store execution mean",30.7,3.0,"30.6–30.9","2.9–3.0"]],"ms",1000,1000,"Stock","All three");
+bars2("e2e",[["KV read-back p50",575,197],["retrieve queueing p50",167,0.2],["retrieve execution mean",109,30],["lookup execution mean",21.7,14.7],["store execution mean",24.4,8.0]],"ms",1000,1000,"Stock","All three");
 
 // ---------- mono hang: deadlock vs fixed ----------
 (function(){
@@ -650,8 +615,8 @@ bars2("e2e",[["KV read-back p50",855,215,"745–947","191–242"],["retrieve que
 })();
 
 // ---------- server-only sweep line charts ----------
-const SWEEP={"stock":{"retrieve":[[32768,48.8],[49152,86.6],[65536,124.5],[81920,161.0],[98304,203.0],[114688,237.1],[131072,273.1],[147456,376.3],[163840,350.6],[180224,389.7],[196608,425.9],[212992,465.3],[229376,498.9],[245760,540.6],[262144,578.7],[278528,614.3],[294912,649.4],[311296,691.7],[327680,723.3],[344064,760.3],[360448,802.3],[376832,845.2],[393216,880.7],[409600,914.5],[425984,954.6],[442368,989.2],[458752,1028.2],[475136,1067.9],[491520,1106.4],[507904,1141.1],[524288,1178.8]],"store":[[16384,70.7],[32768,64.8],[49152,67.1],[65536,70.7],[81920,71.5],[98304,72.1],[114688,75.8],[131072,78.3],[147456,83.8],[163840,84.4],[180224,87.8],[196608,89.5],[212992,95.4],[229376,93.1],[245760,97.1],[262144,96.5],[278528,99.6],[294912,99.0],[311296,98.5],[327680,102.4],[344064,103.0],[360448,113.0],[376832,111.0],[393216,112.9],[409600,116.4],[425984,116.9],[442368,119.5],[458752,123.4],[475136,123.6],[491520,121.4],[507904,130.9],[524288,129.8]],"turn":[[16384,80.2],[32768,118.0],[49152,159.9],[65536,203.1],[81920,242.1],[98304,286.6],[114688,326.2],[131072,366.5],[147456,476.8],[163840,453.3],[180224,499.4],[196608,536.9],[212992,583.5],[229376,617.8],[245760,665.7],[262144,704.9],[278528,745.1],[294912,781.4],[311296,825.7],[327680,862.2],[344064,901.6],[360448,1028.2],[376832,999.4],[393216,1038.9],[409600,1077.7],[425984,1193.3],[442368,1157.9],[458752,1203.7],[475136,1319.4],[491520,1284.7],[507904,1331.0],[524288,1443.3]],"lookup":[[16384,9.5],[32768,4.3],[49152,6.1],[65536,7.8],[81920,9.5],[98304,11.5],[114688,13.2],[131072,15.0],[147456,16.6],[163840,18.2],[180224,20.4],[196608,21.4],[212992,22.8],[229376,25.6],[245760,27.9],[262144,29.6],[278528,31.1],[294912,33.0],[311296,35.4],[327680,36.4],[344064,38.2],[360448,112.8],[376832,43.1],[393216,45.1],[409600,46.7],[425984,121.7],[442368,49.1],[458752,52.0],[475136,127.7],[491520,56.8],[507904,59.0],[524288,134.5]]},"pool":{"retrieve":[[32768,19.1],[49152,32.6],[65536,45.8],[81920,59.5],[98304,74.4],[114688,91.2],[131072,106.1],[147456,120.1],[163840,136.1],[180224,150.7],[196608,164.9],[212992,180.8],[229376,193.7],[245760,207.5],[262144,224.3],[278528,235.4],[294912,249.7],[311296,268.5],[327680,278.4],[344064,293.8],[360448,307.5],[376832,324.0],[393216,338.4],[409600,353.2],[425984,364.5],[442368,382.0],[458752,396.9],[475136,486.5],[491520,426.2],[507904,439.0],[524288,453.3]],"store":[[16384,41.4],[32768,33.5],[49152,36.8],[65536,37.9],[81920,39.1],[98304,103.9],[114688,46.1],[131072,46.3],[147456,52.2],[163840,51.7],[180224,53.6],[196608,60.3],[212992,64.0],[229376,64.3],[245760,64.3],[262144,67.1],[278528,138.6],[294912,69.9],[311296,69.3],[327680,74.3],[344064,72.7],[360448,75.8],[376832,83.6],[393216,81.9],[409600,148.0],[425984,81.1],[442368,88.1],[458752,89.2],[475136,92.3],[491520,94.0],[507904,94.8],[524288,99.3]],"turn":[[16384,50.9],[32768,57.1],[49152,76.2],[65536,92.3],[81920,108.8],[98304,191.0],[114688,151.4],[131072,169.2],[147456,190.1],[163840,207.6],[180224,226.7],[196608,248.7],[212992,269.7],[229376,286.1],[245760,301.2],[262144,322.6],[278528,407.2],[294912,355.8],[311296,374.8],[327680,392.7],[344064,407.1],[360448,425.7],[376832,452.3],[393216,468.3],[409600,551.9],[425984,498.0],[442368,523.5],[458752,541.3],[475136,636.3],[491520,580.7],[507904,597.5],[524288,694.2]],"lookup":[[16384,9.5],[32768,4.4],[49152,6.7],[65536,8.5],[81920,10.2],[98304,12.6],[114688,14.0],[131072,16.6],[147456,17.7],[163840,19.8],[180224,22.4],[196608,23.5],[212992,24.8],[229376,28.1],[245760,29.4],[262144,31.2],[278528,33.1],[294912,36.1],[311296,36.9],[327680,39.9],[344064,40.6],[360448,42.3],[376832,44.6],[393216,47.9],[409600,50.6],[425984,52.2],[442368,53.3],[458752,55.0],[475136,57.5],[491520,60.4],[507904,63.5],[524288,141.5]]},"hash":{"retrieve":[[32768,45.8],[49152,80.0],[65536,117.0],[81920,152.1],[98304,185.7],[114688,221.5],[131072,254.3],[147456,292.2],[163840,329.2],[180224,360.3],[196608,396.8],[212992,428.9],[229376,465.2],[245760,502.8],[262144,535.0],[278528,573.9],[294912,610.1],[311296,646.3],[327680,680.3],[344064,785.1],[360448,751.8],[376832,789.2],[393216,896.4],[409600,857.6],[425984,888.7],[442368,929.3],[458752,965.6],[475136,999.8],[491520,1032.5],[507904,1072.5],[524288,1104.1]],"store":[[16384,65.4],[32768,60.9],[49152,60.6],[65536,62.0],[81920,61.5],[98304,60.9],[114688,61.2],[131072,60.9],[147456,62.1],[163840,64.1],[180224,61.3],[196608,61.5],[212992,62.4],[229376,62.9],[245760,63.3],[262144,64.4],[278528,63.5],[294912,64.0],[311296,63.8],[327680,62.4],[344064,63.5],[360448,64.9],[376832,64.0],[393216,66.0],[409600,64.3],[425984,65.2],[442368,65.5],[458752,63.8],[475136,69.4],[491520,69.9],[507904,66.0],[524288,66.5]],"turn":[[16384,73.9],[32768,109.8],[49152,144.5],[65536,184.1],[81920,219.4],[98304,253.5],[114688,290.3],[131072,323.9],[147456,363.9],[163840,404.2],[180224,433.1],[196608,471.1],[212992,505.0],[229376,542.9],[245760,582.0],[262144,616.2],[278528,655.7],[294912,693.2],[311296,730.3],[327680,763.8],[344064,870.6],[360448,840.1],[376832,877.4],[393216,987.2],[409600,948.0],[425984,981.0],[442368,1022.7],[458752,1133.6],[475136,1180.3],[491520,1134.2],[507904,1170.3],[524288,1205.0]],"lookup":[[16384,8.4],[32768,3.0],[49152,3.9],[65536,5.0],[81920,5.8],[98304,6.9],[114688,7.6],[131072,8.6],[147456,9.5],[163840,10.9],[180224,11.5],[196608,12.7],[212992,13.6],[229376,14.7],[245760,15.8],[262144,16.7],[278528,18.1],[294912,18.9],[311296,20.1],[327680,20.9],[344064,21.8],[360448,23.1],[376832,24.0],[393216,24.6],[409600,26.0],[425984,26.9],[442368,27.7],[458752,104.0],[475136,111.0],[491520,31.6],[507904,31.6],[524288,34.1]]},"all3":{"retrieve":[[32768,15.5],[49152,27.0],[65536,38.7],[81920,50.2],[98304,62.0],[114688,74.6],[131072,86.4],[147456,98.2],[163840,110.0],[180224,121.5],[196608,134.3],[212992,146.4],[229376,158.2],[245760,169.6],[262144,183.1],[278528,196.0],[294912,277.7],[311296,217.8],[327680,233.3],[344064,243.4],[360448,255.1],[376832,267.9],[393216,279.5],[409600,292.0],[425984,303.8],[442368,315.0],[458752,326.3],[475136,338.7],[491520,350.0],[507904,363.9],[524288,375.6]],"store":[[16384,35.7],[32768,29.3],[49152,29.5],[65536,28.7],[81920,29.8],[98304,29.2],[114688,28.3],[131072,29.6],[147456,30.7],[163840,29.5],[180224,31.0],[196608,30.4],[212992,31.5],[229376,31.3],[245760,30.9],[262144,32.1],[278528,31.2],[294912,31.6],[311296,32.1],[327680,33.5],[344064,33.8],[360448,33.7],[376832,32.9],[393216,32.3],[409600,34.6],[425984,34.5],[442368,35.4],[458752,34.3],[475136,36.0],[491520,35.7],[507904,37.7],[524288,39.0]],"turn":[[16384,44.3],[32768,47.6],[49152,60.2],[65536,72.0],[81920,85.5],[98304,97.5],[114688,110.3],[131072,124.2],[147456,137.9],[163840,149.4],[180224,163.2],[196608,177.0],[212992,191.2],[229376,271.2],[245760,215.4],[262144,230.8],[278528,244.2],[294912,326.8],[311296,268.0],[327680,285.9],[344064,296.9],[360448,309.9],[376832,396.0],[393216,334.3],[409600,349.8],[425984,473.7],[442368,375.9],[458752,386.3],[475136,475.4],[491520,413.8],[507904,541.4],[524288,446.1]],"lookup":[[16384,8.5],[32768,2.8],[49152,3.7],[65536,4.6],[81920,5.4],[98304,6.2],[114688,7.3],[131072,8.1],[147456,9.0],[163840,9.8],[180224,10.7],[196608,12.2],[212992,13.2],[229376,81.7],[245760,14.7],[262144,15.5],[278528,16.9],[294912,17.4],[311296,17.9],[327680,19.0],[344064,19.7],[360448,20.9],[376832,95.0],[393216,22.4],[409600,23.0],[425984,135.3],[442368,25.4],[458752,25.6],[475136,100.4],[491520,28.0],[507904,139.6],[524288,31.3]]},"all4":{"retrieve":[[32768,14.4],[49152,23.6],[65536,32.9],[81920,43.3],[98304,52.5],[114688,61.8],[131072,71.3],[147456,81.7],[163840,91.5],[180224,100.5],[196608,110.5],[212992,120.1],[229376,130.7],[245760,140.5],[262144,149.5],[278528,159.1],[294912,169.7],[311296,178.9],[327680,188.8],[344064,198.6],[360448,210.1],[376832,218.8],[393216,228.3],[409600,237.9],[425984,246.5],[442368,258.3],[458752,267.0],[475136,276.5],[491520,286.1],[507904,367.0],[524288,305.6]],"store":[[16384,26.2],[32768,20.6],[49152,22.2],[65536,23.9],[81920,25.6],[98304,25.9],[114688,27.5],[131072,27.5],[147456,28.9],[163840,32.9],[180224,32.9],[196608,34.8],[212992,33.7],[229376,35.7],[245760,37.6],[262144,35.4],[278528,37.9],[294912,41.8],[311296,41.8],[327680,41.8],[344064,43.3],[360448,43.8],[376832,46.9],[393216,44.4],[409600,43.3],[425984,48.0],[442368,52.2],[458752,51.4],[475136,52.2],[491520,54.2],[507904,53.9],[524288,57.5]],"turn":[[16384,34.6],[32768,37.7],[49152,49.4],[65536,61.2],[81920,74.4],[98304,84.5],[114688,96.2],[131072,106.6],[147456,119.2],[163840,133.7],[180224,143.6],[196608,156.6],[212992,165.8],[229376,179.8],[245760,192.4],[262144,200.2],[278528,213.1],[294912,228.6],[311296,238.6],[327680,248.9],[344064,261.0],[360448,341.9],[376832,287.1],[393216,294.4],[409600,303.8],[425984,317.9],[442368,404.1],[458752,413.4],[475136,355.1],[491520,367.2],[507904,520.7],[524288,393.0]],"lookup":[[16384,8.3],[32768,2.7],[49152,3.5],[65536,4.4],[81920,5.5],[98304,6.0],[114688,6.8],[131072,7.7],[147456,8.5],[163840,9.3],[180224,10.2],[196608,11.2],[212992,12.0],[229376,13.4],[245760,14.1],[262144,15.2],[278528,16.0],[294912,17.0],[311296,17.7],[327680,18.2],[344064,19.0],[360448,87.9],[376832,21.3],[393216,21.5],[409600,22.5],[425984,23.2],[442368,93.4],[458752,94.8],[475136,26.2],[491520,26.8],[507904,99.5],[524288,29.8]]}};
-const SER=[["stock","Stock","--s2"],["pool","Event pool only","--s1"],["hash","Client hashing only","--s3"],["all3","All three","--s4"],["all4","All four","--s5"]];
+const SWEEP={"stock":{"retrieve":[[32768,48.8],[49152,86.6],[65536,124.5],[81920,161.0],[98304,203.0],[114688,237.1],[131072,273.1],[147456,376.3],[163840,350.6],[180224,389.7],[196608,425.9],[212992,465.3],[229376,498.9],[245760,540.6],[262144,578.7],[278528,614.3],[294912,649.4],[311296,691.7],[327680,723.3],[344064,760.3],[360448,802.3],[376832,845.2],[393216,880.7],[409600,914.5],[425984,954.6],[442368,989.2],[458752,1028.2],[475136,1067.9],[491520,1106.4],[507904,1141.1],[524288,1178.8]],"store":[[16384,70.7],[32768,64.8],[49152,67.1],[65536,70.7],[81920,71.5],[98304,72.1],[114688,75.8],[131072,78.3],[147456,83.8],[163840,84.4],[180224,87.8],[196608,89.5],[212992,95.4],[229376,93.1],[245760,97.1],[262144,96.5],[278528,99.6],[294912,99.0],[311296,98.5],[327680,102.4],[344064,103.0],[360448,113.0],[376832,111.0],[393216,112.9],[409600,116.4],[425984,116.9],[442368,119.5],[458752,123.4],[475136,123.6],[491520,121.4],[507904,130.9],[524288,129.8]],"turn":[[16384,80.2],[32768,118.0],[49152,159.9],[65536,203.1],[81920,242.1],[98304,286.6],[114688,326.2],[131072,366.5],[147456,476.8],[163840,453.3],[180224,499.4],[196608,536.9],[212992,583.5],[229376,617.8],[245760,665.7],[262144,704.9],[278528,745.1],[294912,781.4],[311296,825.7],[327680,862.2],[344064,901.6],[360448,1028.2],[376832,999.4],[393216,1038.9],[409600,1077.7],[425984,1193.3],[442368,1157.9],[458752,1203.7],[475136,1319.4],[491520,1284.7],[507904,1331.0],[524288,1443.3]],"lookup":[[16384,9.5],[32768,4.3],[49152,6.1],[65536,7.8],[81920,9.5],[98304,11.5],[114688,13.2],[131072,15.0],[147456,16.6],[163840,18.2],[180224,20.4],[196608,21.4],[212992,22.8],[229376,25.6],[245760,27.9],[262144,29.6],[278528,31.1],[294912,33.0],[311296,35.4],[327680,36.4],[344064,38.2],[360448,112.8],[376832,43.1],[393216,45.1],[409600,46.7],[425984,121.7],[442368,49.1],[458752,52.0],[475136,127.7],[491520,56.8],[507904,59.0],[524288,134.5]]},"pool":{"retrieve":[[32768,19.1],[49152,32.6],[65536,45.8],[81920,59.5],[98304,74.4],[114688,91.2],[131072,106.1],[147456,120.1],[163840,136.1],[180224,150.7],[196608,164.9],[212992,180.8],[229376,193.7],[245760,207.5],[262144,224.3],[278528,235.4],[294912,249.7],[311296,268.5],[327680,278.4],[344064,293.8],[360448,307.5],[376832,324.0],[393216,338.4],[409600,353.2],[425984,364.5],[442368,382.0],[458752,396.9],[475136,486.5],[491520,426.2],[507904,439.0],[524288,453.3]],"store":[[16384,41.4],[32768,33.5],[49152,36.8],[65536,37.9],[81920,39.1],[98304,103.9],[114688,46.1],[131072,46.3],[147456,52.2],[163840,51.7],[180224,53.6],[196608,60.3],[212992,64.0],[229376,64.3],[245760,64.3],[262144,67.1],[278528,138.6],[294912,69.9],[311296,69.3],[327680,74.3],[344064,72.7],[360448,75.8],[376832,83.6],[393216,81.9],[409600,148.0],[425984,81.1],[442368,88.1],[458752,89.2],[475136,92.3],[491520,94.0],[507904,94.8],[524288,99.3]],"turn":[[16384,50.9],[32768,57.1],[49152,76.2],[65536,92.3],[81920,108.8],[98304,191.0],[114688,151.4],[131072,169.2],[147456,190.1],[163840,207.6],[180224,226.7],[196608,248.7],[212992,269.7],[229376,286.1],[245760,301.2],[262144,322.6],[278528,407.2],[294912,355.8],[311296,374.8],[327680,392.7],[344064,407.1],[360448,425.7],[376832,452.3],[393216,468.3],[409600,551.9],[425984,498.0],[442368,523.5],[458752,541.3],[475136,636.3],[491520,580.7],[507904,597.5],[524288,694.2]],"lookup":[[16384,9.5],[32768,4.4],[49152,6.7],[65536,8.5],[81920,10.2],[98304,12.6],[114688,14.0],[131072,16.6],[147456,17.7],[163840,19.8],[180224,22.4],[196608,23.5],[212992,24.8],[229376,28.1],[245760,29.4],[262144,31.2],[278528,33.1],[294912,36.1],[311296,36.9],[327680,39.9],[344064,40.6],[360448,42.3],[376832,44.6],[393216,47.9],[409600,50.6],[425984,52.2],[442368,53.3],[458752,55.0],[475136,57.5],[491520,60.4],[507904,63.5],[524288,141.5]]},"hash":{"retrieve":[[32768,45.8],[49152,80.0],[65536,117.0],[81920,152.1],[98304,185.7],[114688,221.5],[131072,254.3],[147456,292.2],[163840,329.2],[180224,360.3],[196608,396.8],[212992,428.9],[229376,465.2],[245760,502.8],[262144,535.0],[278528,573.9],[294912,610.1],[311296,646.3],[327680,680.3],[344064,785.1],[360448,751.8],[376832,789.2],[393216,896.4],[409600,857.6],[425984,888.7],[442368,929.3],[458752,965.6],[475136,999.8],[491520,1032.5],[507904,1072.5],[524288,1104.1]],"store":[[16384,65.4],[32768,60.9],[49152,60.6],[65536,62.0],[81920,61.5],[98304,60.9],[114688,61.2],[131072,60.9],[147456,62.1],[163840,64.1],[180224,61.3],[196608,61.5],[212992,62.4],[229376,62.9],[245760,63.3],[262144,64.4],[278528,63.5],[294912,64.0],[311296,63.8],[327680,62.4],[344064,63.5],[360448,64.9],[376832,64.0],[393216,66.0],[409600,64.3],[425984,65.2],[442368,65.5],[458752,63.8],[475136,69.4],[491520,69.9],[507904,66.0],[524288,66.5]],"turn":[[16384,73.9],[32768,109.8],[49152,144.5],[65536,184.1],[81920,219.4],[98304,253.5],[114688,290.3],[131072,323.9],[147456,363.9],[163840,404.2],[180224,433.1],[196608,471.1],[212992,505.0],[229376,542.9],[245760,582.0],[262144,616.2],[278528,655.7],[294912,693.2],[311296,730.3],[327680,763.8],[344064,870.6],[360448,840.1],[376832,877.4],[393216,987.2],[409600,948.0],[425984,981.0],[442368,1022.7],[458752,1133.6],[475136,1180.3],[491520,1134.2],[507904,1170.3],[524288,1205.0]],"lookup":[[16384,8.4],[32768,3.0],[49152,3.9],[65536,5.0],[81920,5.8],[98304,6.9],[114688,7.6],[131072,8.6],[147456,9.5],[163840,10.9],[180224,11.5],[196608,12.7],[212992,13.6],[229376,14.7],[245760,15.8],[262144,16.7],[278528,18.1],[294912,18.9],[311296,20.1],[327680,20.9],[344064,21.8],[360448,23.1],[376832,24.0],[393216,24.6],[409600,26.0],[425984,26.9],[442368,27.7],[458752,104.0],[475136,111.0],[491520,31.6],[507904,31.6],[524288,34.1]]},"final3":{"retrieve":[[32768,16.1],[49152,27.6],[65536,39.1],[81920,50.6],[98304,62.1],[114688,74.1],[131072,85.9],[147456,250.4],[163840,108.8],[180224,120.6],[196608,133.3],[212992,144.8],[229376,158.5],[245760,167.6],[262144,180.0],[278528,191.4],[294912,203.8],[311296,301.8],[327680,227.6],[344064,238.0],[360448,251.7],[376832,261.8],[393216,276.8],[409600,286.8],[425984,298.1],[442368,310.8],[458752,322.9],[475136,335.8],[491520,346.7],[507904,362.5],[524288,470.8]],"store":[[16384,28.5],[32768,23.2],[49152,24.0],[65536,25.4],[81920,28.7],[98304,27.6],[114688,28.7],[131072,31.5],[147456,34.0],[163840,34.9],[180224,37.4],[196608,38.0],[212992,39.4],[229376,41.5],[245760,42.4],[262144,44.6],[278528,47.7],[294912,47.1],[311296,47.2],[327680,49.7],[344064,48.5],[360448,51.3],[376832,54.7],[393216,55.1],[409600,135.9],[425984,56.2],[442368,56.1],[458752,57.5],[475136,140.5],[491520,59.8],[507904,64.1],[524288,143.3]],"turn":[[16384,38.9],[32768,42.5],[49152,56.1],[65536,69.9],[81920,85.9],[98304,97.1],[114688,111.2],[131072,126.9],[147456,294.8],[163840,155.5],[180224,170.7],[196608,185.0],[212992,199.0],[229376,215.9],[245760,227.2],[262144,242.5],[278528,258.4],[294912,270.9],[311296,469.9],[327680,299.3],[344064,309.3],[360448,327.0],[376832,341.5],[393216,456.6],[409600,450.1],[425984,383.5],[442368,396.1],[458752,410.7],[475136,507.9],[491520,439.8],[507904,461.3],[524288,651.2]],"lookup":[[16384,10.3],[32768,3.1],[49152,4.5],[65536,5.3],[81920,6.5],[98304,7.3],[114688,8.3],[131072,9.4],[147456,10.4],[163840,11.7],[180224,12.6],[196608,13.6],[212992,14.7],[229376,15.9],[245760,17.1],[262144,17.8],[278528,19.1],[294912,19.8],[311296,120.9],[327680,21.9],[344064,22.6],[360448,23.8],[376832,24.9],[393216,124.5],[409600,27.3],[425984,29.0],[442368,29.0],[458752,30.1],[475136,31.5],[491520,33.1],[507904,34.5],[524288,36.8]]}};
+const SER=[["stock","Stock","--s2"],["pool","Event pool only","--s1"],["hash","Client hashing only","--s3"],["final3","All three","--good"]];
 function niceMax(v){const e=Math.pow(10,Math.floor(Math.log10(v)));for(const m of [1,1.5,2,2.5,3,4,5,6,8,10]){if(m*e>=v)return m*e}return 10*e}
 function lineChart(id,kind){
   const s=document.getElementById(id), L=60, R=850, T=14, B=280, XM=524288;
