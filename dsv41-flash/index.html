@@ -298,6 +298,62 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
   .g-step{margin-left:6rem}
   .g-axis{margin:.2rem 4.3rem 0 6rem;font-size:9px}
 }
+/* 附：ATOM op graph */
+#opg-wrap{position:relative}
+.opg-ctl{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:center;font-size:13px;margin-bottom:.5rem}
+.opg-ctl .segc{margin:0}
+.opg-btn{font:inherit;font-size:13px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:6px;padding:.25rem .7rem;cursor:pointer}
+.opg-btn:hover{border-color:var(--muted)}
+.opg-status{color:var(--muted);font-size:12.5px;flex:1 1 16rem}
+.opg-legend{display:flex;flex-wrap:wrap;gap:.3rem .9rem;font-size:12px;color:var(--muted);margin:.3rem 0 .7rem}
+.opg-key{display:inline-flex;align-items:center;gap:5px}
+.opg-key i{display:inline-block;width:12px;height:12px;border-radius:2px}
+.opg-key em{font-style:normal;font-size:11px;padding:0 5px;border-radius:3px;line-height:15px}
+.opg-scroll{overflow-x:auto;padding-bottom:.3rem}
+.opg-grid{display:inline-block;min-width:max-content}
+.opg-row{display:flex;align-items:center;gap:6px;height:14px}
+.opg-head{height:auto;align-items:flex-end;margin-bottom:5px}
+.opg-lab{flex:0 0 70px;display:flex;justify-content:flex-end;align-items:center;gap:4px;font-family:var(--font-mono);font-size:11px;cursor:default}
+.opg-lab small{color:var(--muted);font-size:9.5px}
+.opg-lab em,.opg-key em{font-style:normal}
+.opg-lab em{padding:0 4px;border-radius:3px;line-height:13px;min-width:28px;text-align:center}
+.m-swa{background:var(--swa-soft);color:var(--swa)}
+.m-full2,.m-full1{background:var(--csa);color:var(--surface)}
+.m-reindex{background:var(--csa-mid);color:var(--ink)}
+.m-reuse2,.m-reuse1{background:var(--csa-soft);color:var(--csa)}
+.m-draft{background:var(--hca-soft);color:var(--hca)}
+.opg-grp{display:flex;flex-direction:column;gap:3px}
+.opg-grp b{font-size:11px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--rule);padding-bottom:1px;white-space:nowrap}
+.opg-cols{display:flex;gap:2px}
+.opg-ch{writing-mode:vertical-rl;text-orientation:sideways;transform:rotate(180deg);width:12px;height:76px;font-size:10.5px;line-height:13px;color:var(--muted);white-space:nowrap;overflow:hidden;cursor:default}
+.opg-c{display:block;width:12px;height:12px;border-radius:2px;box-shadow:inset 0 0 0 1px var(--rule);cursor:default}
+.opg-c.on{background:color-mix(in oklab,var(--muted) 62%,var(--surface));box-shadow:none}
+.opg-c.on.tail{background:color-mix(in oklab,var(--muted) 24%,var(--surface))}
+.opg-c.has{box-shadow:none}
+.opg-c.odd{box-shadow:inset 0 0 0 2px var(--rope)}
+.opg-c.miss{box-shadow:inset 0 0 0 1px var(--muted);background:repeating-linear-gradient(135deg,transparent 0 3px,color-mix(in oklab,var(--muted) 30%,transparent) 3px 4px)}
+.opg-c:hover,.opg-ch:hover{outline:1.5px solid var(--ink);outline-offset:1px}
+.opg-band{font-size:11.5px;font-weight:600;color:var(--muted);margin:8px 0 3px 76px;position:sticky;left:0}
+.opg-grid.nodata .opg-tot{display:none}
+.opg-tot{flex:0 0 96px;white-space:nowrap;overflow:hidden;display:flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:10.5px;color:var(--muted)}
+.opg-bar{display:inline-block;height:8px;background:var(--csa-mid);border-radius:0 3px 3px 0}
+.opg-srow{display:flex;align-items:flex-start;gap:6px;margin:6px 0}
+.opg-slab{flex:0 0 76px;text-align:right;font-size:11px;font-weight:600;color:var(--muted);line-height:1.35}
+.opg-slab small{display:block;font-weight:400;font-family:var(--font-mono)}
+.opg-strip{display:flex;flex-wrap:wrap;gap:4px 10px;max-width:760px}
+.opg-sc{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+#opg-top{margin-bottom:6px}
+#opg-bottom{margin-top:10px;border-top:1px solid var(--rule);padding-top:6px}
+.opg-tip{position:absolute;z-index:5;width:330px;background:var(--surface);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:.5rem .65rem;font-size:12px;line-height:1.5;box-shadow:0 6px 20px rgb(0 0 0 / .14);pointer-events:none;display:flex;flex-direction:column;gap:2px}
+.opg-tip[hidden]{display:none}
+.opg-tip code{font-size:11px;word-break:break-all;color:var(--muted)}
+.opg-tip small{color:var(--muted);font-size:11px}
+.opg-tip .opg-k{font-family:var(--font-mono);font-size:10.5px;word-break:break-all}
+.opg-tip .opg-tv{font-weight:600;margin-top:2px}
+.opg-details{margin:1rem 0}
+.opg-details summary{cursor:pointer;font-size:14px;font-weight:600}
+.opg-details td{font-size:12.5px;vertical-align:top}
+.opg-details code{font-size:11.5px;word-break:break-all}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
@@ -339,6 +395,7 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
       <li><a href="#d-moe"><span>3.10</span>MoE 与多模态</a></li>
       <li><a href="#d-deploy"><span>3.11</span>部署与代码生态</a></li>
       <li><a href="#d-open"><span>附</span>未确认的问题与来源</a></li>
+      <li><a href="#x-opgraph"><span>附</span>ATOM 算子调用图</a></li>
     </ol>
   </nav>
 </details>
@@ -1598,6 +1655,76 @@ return x, ffn_pre                                  <span class="c"># 交给下�
   </footer>
 </section>
 
+<section class="sec" id="x-opgraph">
+  <div class="sec-no">附</div>
+  <h3>ATOM 算子调用图：从 L0 到采样</h3>
+  <p class="gist">按 ATOM 最新代码梳理一步 forward 会启动的 GPU 算子：每行一层，列按执行顺序排。可以加载自己的 profiling 数据，把每个算子的 GPU 时间叠上去。数据只在你的浏览器里读，不上传。</p>
+  <p class="source">对应配置：ATOM 3ff3d68f8 · AITER f60ee45dd · MI355X · TP4 + 整专家 EP · FP8 主 KV · FP8 index · decode FULL graph · prefill eager + 解码器/编码器 SWA bounded replay · DSpark 5 token。</p>
+
+  <h4>怎么读</h4>
+  <ul>
+    <li>从上往下就是执行顺序：prologue → 编码器 L0–19 → 解码器 L20–39 → epilogue（logits、采样）→ DSpark 写草稿 KV → 3 个草稿块 → 草稿头。</li>
+    <li>每层分三段：层前置（只有 L1、L14 的 Engram 和 L37–39 的 DSpark 取数）、attention 半层、FFN 半层。每个半层都以一次 mHC 接缝（<code>mega_mhc</code>）开头，以一次 TP all-reduce 结尾。</li>
+    <li>行首色块是层的模式，它决定 attention 半层里有没有压缩器和 indexer：Full 层写 KV 并全扫打分，Reindex 层只在候选池里打分，Reuse 层两样都借。</li>
+    <li>prefill 视图里，解码器各层只跑每个 prompt 的最后 128 行（浅色格）；L20 的 mHC 接缝和压缩器跑全部行，因为 KV④ 要覆盖每个 token。</li>
+    <li>有两处并行不在格子的先后里体现：Engram 查表在副 stream 上提前做（算在 prologue）；shared expert 在另一个 stream 上，和 routed experts 同时跑。</li>
+  </ul>
+
+  <div class="widget opg" id="opg-wrap">
+    <div class="opg-ctl">
+      <div class="segc" id="opg-phase" role="group" aria-label="阶段"><button type="button" data-phase="decode">decode</button><button type="button" data-phase="prefill">prefill</button></div>
+      <label class="opg-btn">加载数据（JSON）<input type="file" id="opg-file" accept=".json,application/json" multiple hidden></label>
+      <button type="button" class="opg-btn" id="opg-clear">清除数据</button>
+      <span class="opg-status" id="opg-status" role="status"></span>
+    </div>
+    <div class="opg-legend" id="opg-legend"></div>
+    <div class="opg-scroll">
+      <div id="opg-top"></div>
+      <div class="opg-grid" id="opg-grid"></div>
+      <div id="opg-bottom"></div>
+    </div>
+    <div class="opg-tip" id="opg-tip" hidden></div>
+  </div>
+
+  <h4>加载自己的 profiling 数据</h4>
+  <ol>
+    <li>用 ATOM 的 profiler 抓一份 torch trace（<code>*.pt.trace.json.gz</code>，取一个 rank 的就行）。</li>
+    <li>用 <a href="trace_to_opgraph.py">trace_to_opgraph.py</a> 把其中一步拆成“层 × 算子”的 GPU 时间。<code>--spec</code> 直接读本页，算子表和规则只有这一份：
+<pre>python3 trace_to_opgraph.py rank0.pt.trace.json.gz \
+    --spec https://yhl-amd.github.io/dsv41-flash/ \
+    --step 'ATOM::forward tokens=\d+ prefill=0' --all -o decode.json
+python3 trace_to_opgraph.py rank0.pt.trace.json.gz \
+    --spec https://yhl-amd.github.io/dsv41-flash/ \
+    --step 'ATOM::forward tokens=2808 ' -o prefill.json</pre></li>
+    <li>点上面的“加载数据”，可以同时选 decode 和 prefill 两个文件，用按钮切换。</li>
+  </ol>
+  <p>脚本怎么归类 kernel：</p>
+  <ul>
+    <li><b>选哪一步</b>：按 CPU 侧的 annotation（<code>--step</code> 是正则）找到这一步发起的所有 launch，再按 correlation id 找对应的 GPU kernel，graph replay 里的 kernel 也算在内。GPU 侧的 annotation 范围不可靠，会漏掉前面的层，所以不用。<code>--all</code> 对所有匹配的步取中位数。</li>
+    <li><b>切到层</b>：每遇到一个 mHC 接缝 kernel 就进入下一个半层（第 2n、2n+1 个是 Ln 的 attention 和 FFN，40 层之后是草稿块）。半层的 all-reduce 之后，kernel 归到下一层的层前置、epilogue 或草稿头。</li>
+    <li><b>认算子</b>：名字唯一的 kernel 直接按正则归类。名字会重复的几类（FP8 GEMM、BF16 GEMM、RoPE、RMSNorm、all-reduce）按在这一段里出现的次序，对应到这种层模式下同类算子的次序；这个次序由代码固定，跨 stream 交错也不会错位。<code>quantize_fp8</code> 算进紧跟它的那个 FP8 GEMM。PyTorch 小 kernel 和 split-K 归约算进“辅助”，都没对上的算进“未匹配”，加载数据后会出现这两列。</li>
+    <li><b>旧 trace</b>：10/23 那份（TP2、BF16 KV、mono decode）也能读，decode 每层只有 mono 的两个大 kernel，未匹配耗时不到 0.1%。</li>
+  </ul>
+
+  <div class="note">
+    <span class="lbl">注意</span>这张图对应的版本和配置
+    <p>算子表是读代码梳理的，没有在这个配置上实测过 trace。几处容易对不上的地方：</p>
+    <ul>
+      <li>EP 下 ATOM 不走 mono 融合 decode（<code>atom/mono/runtime/deployment.py:129</code> 拒绝 expert parallel）；不开 EP 的 TP2/TP4 会走 mono，decode 每层变成 <code>v41_attn_pre</code> 和 <code>v41_layer_post</code> 两个 kernel。</li>
+      <li>TP4 时 final norm、LM head、logits all-gather 在 decode graph 之外 eager 执行；默认 FP8 index 下，prefill 的解码器尾部也不录 graph。</li>
+      <li>recipe 里写的 AITER 版本（<code>2039d2b9</code>，9/13）跑不了当前 ATOM：<code>mla_sparse_prefill_v41</code>、TP4 用的 H=16 kernel、<code>mega_mhc</code> 都是 10 月下旬才进 AITER 的，至少要 10/28 之后的 main。</li>
+      <li>kernel 名字里的模板参数会随 TP 变：通信 kernel 的 <code>&lt;…,4&gt;</code>、<code>wo_a</code> 的 <code>_b2_</code>（TP2 是 <code>_b4_</code>），TP2 的 attention 是 <code>opus_mla_v41_prefill_a8w8_16mx4_64nx1</code>。</li>
+    </ul>
+  </div>
+
+  <details class="opg-details">
+    <summary>全部 88 个算子（表格）</summary>
+    <div class="tbl" id="opg-table"></div>
+  </details>
+
+  <script type="application/json" id="opgraph-spec">{"version":1,"config":"ATOM 3ff3d68f8 · AITER f60ee45dd · MI355X · TP4 + 整专家 EP · FP8 主 KV · FP8 index · decode FULL graph · prefill eager + 解码器/编码器 SWA bounded replay · DSpark 5 token","n_layers":40,"n_draft":3,"markers":{"half":"mega_mhc_kernel|_mhc_fused_post_pre_delayed_rmsnorm_main|atom::v41_attn_pre|atom::v41_layer_post"},"classes":{"fp8":"flydsl_(?!.*(?:skreduce|mega_mhc))|bmm_a8w8_mxscale(?!.*_b(?:[2-9]|\\d\\d)_s\\d)|blockscale_gemm_fp8|gemm_a8w8_blockscale","bf16":"hgemm_bf16|bf16gemm_fp32bf16|opus_gemm|Cijk_(?!.*PostGSU)|wv_splitk|wvSplitK|gemm_a16w16","quant":"quantize_fp8_kernel","rope":"kn_entry_1c_sbhd_cached|rope_cached","rms":"add_rmsnorm_quant_kernel|rmsnorm2d|rms_norm_kernel","ar":"cross_device_reduce|ar_ll|all_?reduce|quick_?all_?reduce|ncclDevKernel_Generic|ncclKernel_AllReduce"},"layout":{"grid":{"groups":["pre","attn","ffn"]},"strips":{"top":["pro"],"bottom":["epi","dkv","dhd"]},"groupLabels":{"pro":"prologue","pre":"层前置","attn":"attention 半层","ffn":"FFN 半层","epi":"epilogue：logits 与采样","dkv":"DSpark：写草稿 KV、准备草稿","dhd":"DSpark：草稿头"},"bands":{"enc":"编码器 L0–19（m=2）","dec":"解码器 L20–39（m=1）","dft":"DSpark 草稿块（L40–42）"},"kinds":[["swa","只有 SWA"],["full2","Full m=2"],["reuse2","Reuse m=2"],["full1","Full m=1"],["reindex","Reindex"],["reuse1","Reuse m=1"],["draft","草稿块"]]},"rows":[{"id":"L0","label":"L0","kind":"swa","band":"enc","grid":true},{"id":"L1","label":"L1","kind":"swa","band":"enc","grid":true,"note":"Engram"},{"id":"L2","label":"L2","kind":"full2","band":"enc","grid":true},{"id":"L3","label":"L3","kind":"reuse2","band":"enc","grid":true},{"id":"L4","label":"L4","kind":"reuse2","band":"enc","grid":true},{"id":"L5","label":"L5","kind":"reuse2","band":"enc","grid":true},{"id":"L6","label":"L6","kind":"reuse2","band":"enc","grid":true},{"id":"L7","label":"L7","kind":"reuse2","band":"enc","grid":true},{"id":"L8","label":"L8","kind":"full2","band":"enc","grid":true},{"id":"L9","label":"L9","kind":"reuse2","band":"enc","grid":true},{"id":"L10","label":"L10","kind":"reuse2","band":"enc","grid":true},{"id":"L11","label":"L11","kind":"reuse2","band":"enc","grid":true},{"id":"L12","label":"L12","kind":"reuse2","band":"enc","grid":true},{"id":"L13","label":"L13","kind":"reuse2","band":"enc","grid":true},{"id":"L14","label":"L14","kind":"full2","band":"enc","grid":true,"note":"Engram"},{"id":"L15","label":"L15","kind":"reuse2","band":"enc","grid":true},{"id":"L16","label":"L16","kind":"reuse2","band":"enc","grid":true},{"id":"L17","label":"L17","kind":"reuse2","band":"enc","grid":true},{"id":"L18","label":"L18","kind":"reuse2","band":"enc","grid":true},{"id":"L19","label":"L19","kind":"reuse2","band":"enc","grid":true},{"id":"L20","label":"L20","kind":"full1","band":"dec","grid":true,"tail":true,"note":"候选池；prefill 时 mHC 接缝和压缩跑全部行，其余只跑尾部 128 行"},{"id":"L21","label":"L21","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L22","label":"L22","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L23","label":"L23","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L24","label":"L24","kind":"reindex","band":"dec","grid":true,"tail":true},{"id":"L25","label":"L25","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L26","label":"L26","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L27","label":"L27","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L28","label":"L28","kind":"reindex","band":"dec","grid":true,"tail":true},{"id":"L29","label":"L29","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L30","label":"L30","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L31","label":"L31","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L32","label":"L32","kind":"reindex","band":"dec","grid":true,"tail":true},{"id":"L33","label":"L33","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L34","label":"L34","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L35","label":"L35","kind":"reuse1","band":"dec","grid":true,"tail":true},{"id":"L36","label":"L36","kind":"reindex","band":"dec","grid":true,"tail":true},{"id":"L37","label":"L37","kind":"reuse1","band":"dec","grid":true,"tail":true,"note":"DSpark 取 hidden"},{"id":"L38","label":"L38","kind":"reuse1","band":"dec","grid":true,"tail":true,"note":"DSpark 取 hidden"},{"id":"L39","label":"L39","kind":"reuse1","band":"dec","grid":true,"tail":true,"note":"DSpark 取 hidden；prefill 时 KV 写全部尾部行，query 只取每个请求的最后一行"},{"id":"D0","label":"草稿块 0","kind":"draft","band":"dft","grid":true,"note":"DSpark 草稿块：SWA + 块内双向 attention，MoE 128 专家选 3"},{"id":"D1","label":"草稿块 1","kind":"draft","band":"dft","grid":true,"note":"DSpark 草稿块：SWA + 块内双向 attention，MoE 128 专家选 3"},{"id":"D2","label":"草稿块 2","kind":"draft","band":"dft","grid":true,"note":"DSpark 草稿块：SWA + 块内双向 attention，MoE 128 专家选 3"}],"ops":[{"id":"pro.h2d","group":"pro","label":"元数据上传","short":"H2D 元数据","kinds":null,"what":"positions、block table、压缩 plan、Engram 行等一次打包上传，再散到固定地址","impl":"hipMemcpyAsync + triton scatter_packed_bytes","src":"atom/utils/packed_h2d.py:84","match":"scatter_packed_bytes"},{"id":"pro.fill_ids","group":"pro","label":"拼 decode 输入","short":"填 decode id","kinds":null,"what":"每个请求的 [anchor, 5 个草稿 token]，来自上一步的采样与草稿","impl":"triton _fill_deferred_decode_ids_kernel","src":"atom/model_engine/model_runner.py:650","match":"_fill_deferred_decode_ids_kernel","phases":["decode"]},{"id":"pro.mono","group":"pro","label":"mono 步开始（旧 trace）","short":"mono 元数据","kinds":null,"what":"只有 mono 融合 decode 才有；本配置（EP）不走 mono","impl":"FlyDSL atom::mono_step_begin_tp*, triton _step_meta_kernel","src":"atom/mono/runtime/step_begin.py:154","match":"atom::mono_step_begin|_step_meta_kernel|_draft_meta_kernel","opt":true},{"id":"pro.meta","group":"pro","label":"步级元数据（旧 trace）","short":"步元数据","kinds":null,"what":"新代码在 L0 的 attention 里按需启动（算在 attn 的索引元数据）","impl":"triton _indptr_scan_all / _window_rows","src":"atom/model_ops/attentions/deepseek_v41/indices.py:105","match":"_indptr_scan_all|_window_rows","opt":true},{"id":"pro.embed","group":"pro","label":"token embedding","short":"embedding","kinds":null,"what":"按词表分片取行，分片外置 0","impl":"triton _masked_embedding_kernel","src":"atom/model_ops/embed_head.py:24","match":"_masked_embedding_kernel"},{"id":"pro.embed_ar","group":"pro","label":"embedding all-reduce","short":"emb AR","kinds":null,"what":"TP4 合并词表分片","impl":"aiter custom all-reduce（ar_ll_gfx9 / cross_device_reduce_*）","src":"atom/model_ops/embed_head.py:178","cls":"ar"},{"id":"pro.eng_compress","group":"pro","label":"Engram：token 压缩","short":"Eng 压缩","kinds":null,"what":"原始 token id → 压缩 id（99,092 种）","impl":"triton _compress_kernel","src":"atom/model_ops/engram/device/hashing.py:402","match":"_compress_kernel","anywhere":true},{"id":"pro.eng_snapshot","group":"pro","label":"Engram：快照与游标","short":"Eng 快照","kinds":null,"what":"每个 token 的 3 个回看 id；prefill 推进游标","impl":"triton _engram_snapshot_kernel, _engram_cursor_kernel","src":"atom/model_ops/engram/device/hashing.py:139","match":"_engram_snapshot_kernel|_engram_cursor_kernel","anywhere":true},{"id":"pro.eng_hash","group":"pro","label":"Engram：n-gram 哈希 ×2","short":"Eng 哈希","kinds":null,"what":"L1、L14 各一次：n=2,3,4 × 8 head → 24 个表行号","impl":"triton _engram_hash_kernel（副 stream）","src":"atom/model_ops/engram/device/hashing.py:70","match":"_engram_hash_kernel","anywhere":true},{"id":"pro.eng_uva","group":"pro","label":"Engram：host 表直读 ×2","short":"Eng UVA 查表","kinds":null,"what":"从 pinned host 内存直接读本 rank 的 6 个 head（FP8+scale），反量化成 bf16","impl":"triton _uva_lookup_kernel（副 stream）","src":"atom/model_ops/engram/device/uva.py:15","match":"_uva_lookup_kernel","anywhere":true},{"id":"pro.eng_gather","group":"pro","label":"Engram：TP all-gather ×2","short":"Eng gather","kinds":null,"what":"4 个 rank 的 head 拼回 [T,6144]","impl":"aiter allgather_lastdim（副 stream）","src":"atom/model_ops/engram/device/staging.py:218","match":"allgather_lastdim|__amd_rocclr_copyBuffer","anywhere":true,"anywhereCtx":["pro","L"]},{"id":"pro.misc","group":"pro","label":"辅助 kernel","short":"辅助","kinds":null,"what":"PyTorch 小 kernel：mHC 4 路残差初始化（expand+copy）、清零、index 等","impl":"torch","src":"atom/models/deepseek_v41/runtime.py:208","match":"_indptr_scan_all|_indices|_window_rows|_candidate_table_kernel|_unit_table_kernel|at::native|at::\\(anonymous|^(?:void )?at::|c10::|^triton_(?:poi|red|per)_fused|elementwise_kernel|CatArrayBatchedCopy|reduce_kernel|PostGSU|skreduce|splitk_reduce|__amd_rocclr_(?:fill|copy)","bucket":true},{"id":"pre.settle","group":"pre","label":"结清上一层 FFN 的 mHC post","short":"mHC post","kinds":null,"what":"Engram 和 DSpark 取数都要读结清后的残差，不能折进下一个 mega_mhc","impl":"aiter mhc_post → aiter::mhc_post_kernel","src":"atom/model_ops/deepseek_v41/mhc.py:200","match":"mhc_post_kernel","rows":["L1","L14","L37","L38","L39"]},{"id":"pre.eng_wkv","group":"pre","label":"Engram：wkv GEMM（含输入量化）","short":"Eng wkv","kinds":null,"what":"[T,6144] × [25600,6144]ᵀ：4 个 key + 1 个 value","impl":"aiter gemm_a8w8_blockscale → bmm_a8w8_mxscale_*_b1_* / flydsl_mxpsh_*","src":"atom/model_ops/engram/device/layer.py:90","cls":"fp8","rows":["L1","L14"]},{"id":"pre.eng_gate","group":"pre","label":"Engram：门控并加回残差","short":"Eng 门控","kinds":null,"what":"每个 (token, 残差流) 一个门：out = r + g·v","impl":"triton _engram_post_wkv_kernel","src":"atom/model_ops/engram/device/gate.py:17","match":"_engram_post_wkv_kernel","rows":["L1","L14"]},{"id":"pre.misc","group":"pre","label":"辅助 kernel","short":"辅助","kinds":null,"what":"L37–39：DSpark 取数 hook 的 mean + copy（把 hidden 存进固定 buffer）","impl":"torch","src":"atom/spec_decode/drafter.py:415","match":"_indptr_scan_all|_indices|_window_rows|_candidate_table_kernel|_unit_table_kernel|at::native|at::\\(anonymous|^(?:void )?at::|c10::|^triton_(?:poi|red|per)_fused|elementwise_kernel|CatArrayBatchedCopy|reduce_kernel|PostGSU|skreduce|splitk_reduce|__amd_rocclr_(?:fill|copy)","bucket":true,"rows":["L1","L14","L37","L38","L39"]},{"id":"attn.mono_pre","group":"attn","label":"mono K1：v41_attn_pre（旧 trace）","short":"mono K1","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"mono 把 mHC、wqkv_a、q/kv norm、RoPE、wq_b、index query 融成一个 kernel；本配置不走","impl":"FlyDSL atom::v41_attn_pre_*","src":"atom/models/deepseek_v41/mono/kernels/attn_pre.py:1216","match":"atom::v41_attn_pre","opt":true,"phases":["decode"]},{"id":"attn.mhc_pre","group":"attn","label":"mHC 接缝 + attn_norm","short":"mHC 接缝","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"上一个子层欠的 post、4 路混合系数、Sinkhorn×20、合成输入、RMSNorm，并量化成 MXFP8","impl":"aiter mega_mhc → aiter::mega_mhc_kernel<5120,…>（旧版为 triton _mhc_fused_post_pre_delayed_rmsnorm_*）","src":"atom/models/deepseek_v41/model.py:150","match":"mega_mhc_kernel|_mhc_fused_post_pre_delayed_rmsnorm","allRowsIn":["L20"]},{"id":"attn.kv_compress_proj","group":"attn","label":"压缩器投影 wkv/wgate","short":"压缩 投影","kinds":["full2","full1"],"what":"m=2：[T,5120]→[T,1024] fp32（wkv|wgate）；m=1：→[T,512] bf16","impl":"aiter tgemm.mm：m=2 asm bf16gemm_fp32bf16_*；m=1 FlyDSL hgemm_bf16_* / Cijk_*","src":"atom/model_ops/deepseek_v41/compressor.py:132","cls":"bf16","allRowsIn":["L20"]},{"id":"attn.kv_compress","group":"attn","label":"压缩：组内加权 + norm + RoPE","short":"压缩","kinds":["full2","full1"],"what":"m=2 两个 token 按 gate softmax 合成一条；RMSNorm、RoPE","impl":"triton _fused_compress_attn_kernel","src":"atom/model_ops/v4_kernels/fused_compress.py:89","match":"_fused_compress_attn_kernel","allRowsIn":["L20"]},{"id":"attn.compress_state","group":"attn","label":"压缩器尾部状态","short":"压缩 状态","kinds":["full2","full1"],"what":"把本次的原始投影写进 STATE 环（m=2 未凑满的组）","impl":"triton _update_compressor_states_kernel","src":"atom/model_ops/v4_kernels/state_writes.py:497","match":"_update_compressor_states_kernel","allRowsIn":["L20"]},{"id":"attn.kv_main_quant","group":"attn","label":"主 KV 量化","short":"主KV 量化","kinds":["full2","full1"],"what":"压缩后的 latent → MXFP8 行","impl":"triton quantize_fp8_kernel","src":"atom/model_ops/attentions/deepseek_v41/cache.py:591","cls":"quant","allRowsIn":["L20"]},{"id":"attn.kv_main_scatter","group":"attn","label":"主 KV 写入页","short":"主KV 写页","kinds":["full2","full1"],"what":"按压缩 plan 把行写进本 owner 的 PAGE（前面有几个 torch 地址计算 kernel，算在辅助里）","impl":"triton _swa_scatter_rows_kernel","src":"atom/model_ops/attentions/deepseek_v41/cache.py:690","match":"_swa_scatter_rows_kernel","allRowsIn":["L20"]},{"id":"attn.index_key_proj","group":"attn","label":"index K 投影","short":"idxK 投影","kinds":["full2","full1"],"what":"indexer.wk：[T,512] → [T,128]","impl":"aiter tgemm.mm → wv_splitk_small_* / hgemm_bf16_*","src":"atom/models/deepseek_v41/attention.py:92","cls":"bf16","allRowsIn":["L20"]},{"id":"attn.index_key_norm","group":"attn","label":"index K norm","short":"idxK norm","kinds":["full2","full1"],"what":"k_norm RMSNorm(128)","impl":"aiter rmsnorm2d_fwd → aiter::add_rmsnorm_quant_kernel","src":"atom/models/deepseek_v41/attention.py:77","cls":"rms","allRowsIn":["L20"]},{"id":"attn.index_key_rope","group":"attn","label":"index K RoPE","short":"idxK RoPE","kinds":["full2","full1"],"what":"key 的 RoPE 维","impl":"aiter rope_cached_positions_fwd_inplace → kn_entry_1c_sbhd_cached_*","src":"atom/model_ops/deepseek_v41/rotary.py:148","cls":"rope","allRowsIn":["L20"]},{"id":"attn.index_key_write","group":"attn","label":"index K 写入","short":"idxK 写入","kinds":["full2","full1"],"what":"FP8 key + 2 的幂 scale，预 shuffle 后写进 index plane","impl":"triton _write_index_kernel（FP4 index 时为 _write_index_fp4_kernel）","src":"atom/model_ops/deepseek_v41/index_write.py:48","match":"_write_index(?:_fp4)?_kernel","allRowsIn":["L20"]},{"id":"attn.tail_gather","group":"attn","label":"取尾部行","short":"取尾部行","kinds":null,"what":"L20：把每个 prompt 最后 128 行的输入和 mHC 状态取出来；L39：只取每个请求的最后一行做 query","impl":"triton _gather_rows","src":"atom/models/deepseek_v41/decoder_graph.py:66","match":"_gather_rows","rows":["L20","L39"],"phases":["prefill"]},{"id":"attn.wqkv_a","group":"attn","label":"wqkv_a：Q/KV 低秩投影","short":"wqkv_a","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"[T,5120] FP8 → [T,1280 | 512]","impl":"aiter gemm_a8w8_blockscale(bpreshuffle) → flydsl_mxpsh_* / bmm_a8w8_mxscale_*_b1_*","src":"atom/models/deepseek_v41/attention.py:408","cls":"fp8"},{"id":"attn.qk_norm","group":"attn","label":"q_norm + kv_norm","short":"q/kv norm","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"q latent → MXFP8；kv latent → bf16，一次 launch","impl":"aiter triton _fused_dual_rmsnorm_mxfp8_quant_kernel","src":"atom/models/deepseek_v41/attention.py:411","match":"_fused_dual_rmsnorm_mxfp8_quant"},{"id":"attn.index_q_proj","group":"attn","label":"index Q 投影","short":"idxQ 投影","kinds":["full2","full1","reindex"],"what":"indexer.wq_b：[T,1280] → [T,32×128]","impl":"FP8 group32 GEMM（flydsl_mxpsh_*）","src":"atom/models/deepseek_v41/attention.py:114","cls":"fp8"},{"id":"attn.index_weights_proj","group":"attn","label":"index 权重投影","short":"idx 权重","kinds":["full2","full1","reindex"],"what":"weights_proj：每个 index head 一个权重","impl":"aiter tgemm.mm → wv_splitk_small_* / hgemm_bf16_*","src":"atom/models/deepseek_v41/attention.py:117","cls":"bf16"},{"id":"attn.index_q_rope","group":"attn","label":"index Q RoPE","short":"idxQ RoPE","kinds":["full2","full1","reindex"],"what":"[T,32,128] 原地 RoPE","impl":"kn_entry_1c_sbhd_cached_*","src":"atom/models/deepseek_v41/attention.py:120","cls":"rope"},{"id":"attn.index_q_quant","group":"attn","label":"index Q 量化","short":"idxQ 量化","kinds":["full2","full1","reindex"],"what":"FP8，每 (token, head) 一个 scale","impl":"aiter dynamic_per_token_scaled_quant_kernel","src":"atom/model_ops/indexer/query.py:88","match":"dynamic_per_token_scaled_quant|rope_hadamard_rotate_activation_fp4quant"},{"id":"attn.index_weight_fold","group":"attn","label":"index 权重折算","short":"idx 折算","kinds":["full2","full1","reindex"],"what":"weights × q_scale × 常数","impl":"triton _scale_indexer_weights_kernel","src":"atom/model_ops/v4_kernels/indexer_weights.py:14","match":"_scale_indexer_weights_kernel"},{"id":"attn.index_score","group":"attn","label":"indexer 打分","short":"idx 打分","kinds":["full2","full1","reindex"],"what":"Full 层扫全部可见行；Reindex 层只扫 L20 圈出的 16,384 个候选位置；长 prefill 分多段","impl":"aiter deepgemm_fp8_paged_mqa_logits → gluon _gluon_deepgemm_fp8_paged_mqa_logits_preshuffle","src":"atom/model_ops/indexer/score.py:190","match":"mqa_logits"},{"id":"attn.candidate_pick","group":"attn","label":"候选池：块最大值 + top-2048 块","short":"候选池","kinds":["full1"],"what":"按 8 行一块取块内最高分，选 2048 块，供 L24/28/32/36 使用","impl":"triton _block_maxima_kernel + aiter top_k_per_row_decode(k=2048)","src":"atom/model_ops/deepseek_v41/indexer.py:189","match":"_block_maxima_kernel|k2048"},{"id":"attn.index_topk","group":"attn","label":"top-512","short":"top-512","kinds":["full2","full1","reindex"],"what":"每个 query 选 512 个压缩行","impl":"aiter top_k_per_row_decode → FlyDSL topk_per_row_decode_k512_* / radix_topk_*","src":"atom/model_ops/indexer/score.py:206","match":"topk_per_row_decode|radix_topk"},{"id":"attn.index_lift","group":"attn","label":"候选列还原成行号","short":"idx lift","kinds":["reindex"],"what":"Reindex：把候选池里的列号还原成压缩行号","impl":"triton _lift_kernel","src":"atom/model_ops/deepseek_v41/candidate_table.py:77","match":"_lift_kernel"},{"id":"attn.wq_b","group":"attn","label":"wq_b：Q 上投影","short":"wq_b","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"[T,1280] → [T,16×512]（本 rank 16 个 head）","impl":"FP8 group32 GEMM（flydsl_mxpsh_*）","src":"atom/models/deepseek_v41/attention.py:417","cls":"fp8"},{"id":"attn.rope_window","group":"attn","label":"RoPE + 量化 + 窗口写","short":"RoPE+窗口","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"q、kv 加 RoPE 并量化成 MXFP8；decode 顺带写 SWA 环","impl":"triton _rope_window_kernel","src":"atom/model_ops/deepseek_v41/rope_window.py:119","match":"_rope_window_kernel"},{"id":"attn.meta","group":"attn","label":"稀疏索引元数据","short":"索引元数据","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"每个 index 组的第一层建一次：indptr、tile 表、候选表、注意力下标","impl":"triton _indptr_scan_all / _unit_table_kernel / _candidate_table_kernel / _indices","src":"atom/model_ops/attentions/deepseek_v41/indices.py:105","match":"_indptr_scan_all|_indices|_window_rows|_unit_table_kernel|_candidate_table_kernel","shown":["L0","L2","L8","L14","L20","L24","L28","L32","L36"]},{"id":"attn.sparse_attn","group":"attn","label":"稀疏 attention","short":"attention","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"每个 query 读 ≤128 个 SWA + ≤512 个选中的压缩行 + sink；草稿块是 SWA + 块内双向","impl":"aiter mla_sparse_prefill_v41 → opus_mla_v41_prefill_a8w8_16mx1_16nx4_kernel（split-K 时加 pa_decode_ps_reduce）；草稿块 triton _sparse_attn_triton_kernel","src":"atom/models/deepseek_v41/attention.py:439","match":"opus_mla|mla_sparse|pa_decode_ps_reduce|_sparse_attn_triton_kernel"},{"id":"attn.window_write","group":"attn","label":"SWA 窗口写入","short":"窗口写","kinds":["swa","full2","reuse2","full1","reindex","reuse1"],"what":"prefill 结束时把每个请求最后 128 行写进各层的 SWA 环","impl":"triton _write_window（BF16 KV 时为 _swa_write_kernel）","src":"atom/model_ops/attentions/deepseek_v41/packed_rows.py:65","match":"_write_window|_swa_write_kernel","phases":["prefill"]},{"id":"attn.inv_rope_quant","group":"attn","label":"逆 RoPE + 量化","short":"逆RoPE量化","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"attention 输出去掉 RoPE，量化成 MXFP8，分 2 组","impl":"aiter inverse_rope_group_quant_kernel","src":"atom/models/deepseek_v41/attention.py:340","match":"inverse_rope_group_quant"},{"id":"attn.wo_a","group":"attn","label":"wo_a：分组输出投影","short":"wo_a","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"2 组 × [4096→1024]","impl":"aiter batched_gemm_a8w8_mxscale_bpreshuffle → FlyDSL bmm_a8w8_mxscale_*_b2_*","src":"atom/models/deepseek_v41/attention.py:348","match":"bmm_a8w8_mxscale.*_b(?:[2-9]|\\d\\d)_s\\d"},{"id":"attn.wo_b","group":"attn","label":"wo_b：输出投影（含输入量化）","short":"wo_b","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"[T,2048] → MXFP8 → [T,5120] 部分和","impl":"triton quantize_fp8_kernel + FP8 group32 GEMM（flydsl_mxpsh_*）","src":"atom/models/deepseek_v41/attention.py:355","cls":"fp8"},{"id":"attn.allreduce","group":"attn","label":"TP all-reduce","short":"AR","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"4 个 rank 的 wo_b 部分和相加","impl":"aiter custom all-reduce：T≤5 ar_ll_gfx9；T=6 ar_ll128；更大 cross_device_reduce_1/2stage","src":"atom/model_ops/linear.py:1723","cls":"ar","terminal":true},{"id":"attn.misc","group":"attn","label":"辅助 kernel","short":"辅助","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"PyTorch 小 kernel（主 KV 写页前的地址计算、拼接等）、split-K 归约","impl":"torch / hipBLASLt PostGSU / flydsl_*_skreduce","src":"","match":"_indptr_scan_all|_indices|_window_rows|_candidate_table_kernel|_unit_table_kernel|at::native|at::\\(anonymous|^(?:void )?at::|c10::|^triton_(?:poi|red|per)_fused|elementwise_kernel|CatArrayBatchedCopy|reduce_kernel|PostGSU|skreduce|splitk_reduce|__amd_rocclr_(?:fill|copy)","bucket":true,"opt":true},{"id":"ffn.mono_post","group":"ffn","label":"mono K2：v41_layer_post（旧 trace）","short":"mono K2","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"mono 把 attention 后半、FFN 接缝和整个 MoE 融成一个 kernel；本配置不走","impl":"FlyDSL atom::v41_layer_post_*","src":"atom/models/deepseek_v41/mono/kernels/layer_post.py:273","match":"atom::v41_layer_post","opt":true,"phases":["decode"]},{"id":"ffn.tail_gather","group":"ffn","label":"取最后一行","short":"取最后行","kinds":null,"what":"L39 的 FFN 只算每个请求的最后一行：先把 mHC 状态取到这些行","impl":"triton _gather_rows","src":"atom/models/deepseek_v41/bounded_replay.py:194","match":"_gather_rows","rows":["L39"],"phases":["prefill"]},{"id":"ffn.mhc_pre","group":"ffn","label":"mHC 接缝 + ffn_norm","short":"mHC 接缝","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"attention 的 post、FFN 的 pre、Sinkhorn、合成输入、RMSNorm（bf16 输出）","impl":"aiter mega_mhc → aiter::mega_mhc_kernel","src":"atom/models/deepseek_v41/model.py:209","match":"mega_mhc_kernel|_mhc_fused_post_pre_delayed_rmsnorm"},{"id":"ffn.router","group":"ffn","label":"router","short":"router","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"[T,5120] → [T,384] 打分；草稿块是 128 个专家","impl":"T≤16：FlyDSL atom::v41_router_s{T}；否则 aiter tgemm.mm（hgemm_bf16_* / Cijk_*）","src":"atom/models/deepseek_v41/moe.py:107","cls":"bf16","match":"atom::v41_router"},{"id":"ffn.topk_gating","group":"ffn","label":"选专家","short":"top-k 门控","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"sqrtsoftplus + bias，选 6 个（草稿块 3 个），归一化 ×1.5","impl":"aiter topk_gating → aiter::topk_gating_kernel_opt<…,384,…>","src":"atom/model_ops/moe.py:5280","match":"topk_gating|_mm_topk_kernel"},{"id":"ffn.moe_sort","group":"ffn","label":"MoE 排序","short":"MoE 排序","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"按本地专家排 token（EP：本 rank 96 个专家）","impl":"aiter opus_moe_sorting_entry<MoeSortingMultiPhaseKernel_*>","src":"aiter/aiter/fused_moe.py:1990","match":"moe_sorting"},{"id":"ffn.moe_quant","group":"ffn","label":"MoE 激活量化","short":"MoE 量化","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"激活 → MXFP8 并按排序写 scale（stage1 / stage2 各一次，若未融合）","impl":"aiter fused_mx_quant_moe_sort_kernel","src":"aiter/aiter/fused_moe.py:4932","match":"fused_mx_quant_moe_sort|dynamic_per_group_scaled_quant|mxfp4_moe_sort"},{"id":"ffn.moe_gemm1","group":"ffn","label":"MoE gate_up + SwiGLU","short":"MoE gemm1","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"A8W4，gate/up 交错，clamp SwiGLU(10)","impl":"FlyDSL mfma_moe1_silu_mul_afp8_wfp4_*","src":"aiter/aiter/ops/flydsl/moe_kernels.py:651","match":"moe1|moe_stage1|fmoe_stage1"},{"id":"ffn.moe_gemm2","group":"ffn","label":"MoE down + 加权","short":"MoE gemm2","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"A8W4 down 投影 × 路由权重，原子累加","impl":"FlyDSL gemm2_a4w4_port_* / mfma_moe2_* (+ moe_reduction_*)","src":"aiter/aiter/ops/flydsl/kernels/mxmoe_dispatcher.py:255","match":"gemm2_a4w4|moe2|moe_stage2|moe_reduction"},{"id":"ffn.shared_gate_up","group":"ffn","label":"shared gate_up（含输入量化）","short":"shared g/u","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"x → MXFP8 → [T,1152]（本 rank 576×2；副 stream，与 routed 并行）","impl":"triton quantize_fp8_kernel + FP8 group32 GEMM（FlyDSL）","src":"atom/models/deepseek_v4/__init__.py:2775","cls":"fp8"},{"id":"ffn.shared_act","group":"ffn","label":"shared SwiGLU","short":"shared act","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"clamp(10) SiLU·up","impl":"aiter silu_and_mul → aiter::act_and_mul_kernel","src":"atom/models/deepseek_v4/__init__.py:2793","match":"act_and_mul"},{"id":"ffn.shared_down","group":"ffn","label":"shared down（含输入量化）","short":"shared down","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"[T,576] → [T,5120]，不单独 reduce","impl":"FP8 group32 GEMM（FlyDSL）","src":"atom/models/deepseek_v4/__init__.py:2796","cls":"fp8"},{"id":"ffn.allreduce","group":"ffn","label":"TP all-reduce","short":"AR","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"routed（EP 部分专家）+ shared（TP 分片）一起求和；EP 下没有 all-to-all","impl":"aiter custom all-reduce","src":"atom/models/deepseek_v4/__init__.py:3041","cls":"ar","terminal":true},{"id":"ffn.misc","group":"ffn","label":"辅助 kernel","short":"辅助","kinds":["swa","full2","reuse2","full1","reindex","reuse1","draft"],"what":"routed + shared 相加（torch add）等","impl":"torch","src":"atom/models/deepseek_v4/__init__.py:3036","match":"_indptr_scan_all|_indices|_window_rows|_candidate_table_kernel|_unit_table_kernel|at::native|at::\\(anonymous|^(?:void )?at::|c10::|^triton_(?:poi|red|per)_fused|elementwise_kernel|CatArrayBatchedCopy|reduce_kernel|PostGSU|skreduce|splitk_reduce|__amd_rocclr_(?:fill|copy)","bucket":true},{"id":"epi.settle","group":"epi","label":"结清最后的 mHC post","short":"mHC post","kinds":null,"what":"L39 FFN 欠的 post","impl":"aiter::mhc_post_kernel","src":"atom/model_ops/deepseek_v41/mhc.py:136","match":"mhc_post_kernel"},{"id":"epi.collapse","group":"epi","label":"4 路残差合成","short":"合成","kinds":null,"what":"按 pre-mix 把 4 路残差加成 [T,5120]","impl":"triton _collapse_kernel","src":"atom/model_ops/deepseek_v41/mhc.py:16","match":"_collapse_kernel"},{"id":"epi.final_norm","group":"epi","label":"final norm","short":"final norm","kinds":null,"what":"RMSNorm（TP4 时在 graph 外）","impl":"aiter rmsnorm2d_fwd","src":"atom/models/deepseek_v41/runtime.py:426","cls":"rms"},{"id":"epi.lm_head","group":"epi","label":"LM head","short":"LM head","kinds":null,"what":"[T,5120] × [32320,5120]ᵀ（本 rank 的词表分片）","impl":"aiter tgemm.mm → Cijk_* / hgemm_bf16_*","src":"atom/model_ops/embed_head.py:266","cls":"bf16"},{"id":"epi.logits_gather","group":"epi","label":"logits all-gather","short":"logits gather","kinds":null,"what":"拼回 [T,129280]","impl":"aiter allgather_lastdim","src":"atom/model_ops/embed_head.py:269","match":"allgather_lastdim|allgather_vec|all_gather"},{"id":"epi.sample","group":"epi","label":"采样","short":"采样","kinds":null,"what":"Gumbel-max 或 argmax","impl":"aiter mixed_sample_outer_exponential / topk_select → topk_per_row_argmax_*","src":"atom/model_ops/sampler.py:198","match":"mix_sample|topk_per_row_argmax|topk_select|top_k_top_p|exponential|distribution_elementwise"},{"id":"epi.verify","group":"epi","label":"草稿验证","short":"验证","kinds":null,"what":"比对 5 个草稿 token，决定接受几个","impl":"triton rejection_greedy_sample_kernel / rejection_synthetic_sample_kernel","src":"atom/model_ops/rejection_sampler.py:260","match":"rejection_.*sample","phases":["decode"]},{"id":"epi.broadcast","group":"epi","label":"TP 广播","short":"广播","kinds":null,"what":"rank 0 的采样结果广播给其他 rank","impl":"RCCL broadcast","src":"atom/model_engine/model_runner.py:3413","match":"ncclDevKernel|nccl.*[Bb]roadcast"},{"id":"epi.commit","group":"epi","label":"提交 Engram 游标","short":"提交游标","kinds":null,"what":"按接受长度提交游标","impl":"triton _commit_cursors","src":"atom/model_ops/attentions/deepseek_v41/speculative.py:24","match":"_commit_cursors","phases":["decode"]},{"id":"epi.misc","group":"epi","label":"辅助 kernel","short":"辅助","kinds":null,"what":"index_select、bounded replay 的输出清零与回填、D2H 等","impl":"torch","src":"atom/models/deepseek_v41/runtime.py:405","match":"_indptr_scan_all|_indices|_window_rows|_candidate_table_kernel|_unit_table_kernel|at::native|at::\\(anonymous|^(?:void )?at::|c10::|^triton_(?:poi|red|per)_fused|elementwise_kernel|CatArrayBatchedCopy|reduce_kernel|PostGSU|skreduce|splitk_reduce|__amd_rocclr_(?:fill|copy)","bucket":true},{"id":"dkv.main_proj","group":"dkv","label":"草稿 KV：main_proj（含输入量化）","short":"main_proj","kinds":null,"what":"15360 → 5120","impl":"FP8 group32 GEMM","src":"atom/spec_decode/dspark_proposer.py:585","cls":"fp8"},{"id":"dkv.main_norm","group":"dkv","label":"草稿 KV：main_norm","short":"main_norm","kinds":null,"what":"RMSNorm","impl":"aiter rmsnorm2d_fwd","src":"atom/spec_decode/dspark_proposer.py:585","cls":"rms"},{"id":"dkv.wkv","group":"dkv","label":"草稿 KV：3 块 wkv（含输入量化）","short":"wkv","kinds":null,"what":"5120 → 3×512，三个草稿块一起算","impl":"FP8 group32 GEMM（native_quant_linear）","src":"atom/models/deepseek_v41/dspark.py:288","cls":"fp8"},{"id":"dkv.kv_tail","group":"dkv","label":"草稿 KV：norm + RoPE + 量化","short":"KV 尾处理","kinds":null,"what":"","impl":"triton _fused_draft_kv_tail_kernel","src":"atom/model_ops/deepseek_v41/dspark.py:304","match":"_fused_draft_kv_tail_kernel"},{"id":"dkv.window_write","group":"dkv","label":"草稿 KV：写 3 个窗口","short":"写窗口","kinds":null,"what":"写草稿层 40–42 的 SWA 环","impl":"triton _write_window ×3","src":"atom/models/deepseek_v41/dspark.py:276","match":"_write_window|_swa_write_kernel"},{"id":"dkv.stage","group":"dkv","label":"草稿：准备 anchor 与窗口","short":"准备","kinds":null,"what":"anchor id/位置、读 3 个 FP8 窗口、块内位置与双向下标","impl":"triton _stage_anchors_kernel / _gather_prefix / _draft_step_kernel","src":"atom/spec_decode/dspark_proposer.py:623","match":"_stage_anchors_kernel|_gather_prefix|_gather_window_kernel|_draft_step_kernel|atom::mono_step_begin|_draft_meta_kernel"},{"id":"dkv.embed","group":"dkv","label":"草稿：anchor embedding","short":"embedding","kinds":null,"what":"","impl":"triton _masked_embedding_kernel","src":"atom/model_ops/embed_head.py:24","match":"_masked_embedding_kernel"},{"id":"dkv.embed_ar","group":"dkv","label":"草稿：embedding all-reduce","short":"emb AR","kinds":null,"what":"","impl":"aiter custom all-reduce","src":"atom/model_ops/embed_head.py:178","cls":"ar"},{"id":"dkv.block_state","group":"dkv","label":"草稿：块初始状态","short":"块状态","kinds":null,"what":"第 0 列 anchor，1–4 列 noise embedding，组成 mHC 残差","impl":"triton _block_state_kernel","src":"atom/model_ops/deepseek_v41/dspark.py:222","match":"_block_state_kernel"},{"id":"dhd.settle","group":"dhd","label":"草稿：结清 mHC + 合成","short":"mHC 收尾","kinds":null,"what":"","impl":"aiter::mhc_post_kernel + triton _collapse_kernel","src":"atom/models/deepseek_v41/dspark.py:570","match":"mhc_post_kernel|_collapse_kernel"},{"id":"dhd.final_norm","group":"dhd","label":"草稿：final norm","short":"final norm","kinds":null,"what":"","impl":"aiter rmsnorm2d_fwd","src":"atom/models/deepseek_v41/dspark.py:570","cls":"rms"},{"id":"dhd.lm_head","group":"dhd","label":"草稿：LM head（不 gather）","short":"LM head","kinds":null,"what":"[B·5, 32320]，保持词表分片","impl":"aiter tgemm.mm","src":"atom/models/deepseek_v41/dspark.py:582","cls":"bf16"},{"id":"dhd.markov","group":"dhd","label":"Markov 头 ×5","short":"Markov ×5","kinds":null,"what":"5 步串行：rank-256 bias + 分片 argmax，再跨 rank 取最大","impl":"triton _dspark_markov_argmax_stage1/2 + aiter allgather_vec + _argmax_gather_kernel","src":"atom/model_ops/dspark_markov_sample.py:79","match":"_dspark_markov_argmax|_argmax_gather_kernel|allgather_vec|allgather_naive"},{"id":"dhd.confidence","group":"dhd","label":"置信度头","short":"置信度","kinds":null,"what":"固定宽度时算了但不用","impl":"aiter tgemm.mm + sigmoid","src":"atom/models/dspark_draft.py:146","cls":"bf16"},{"id":"dhd.misc","group":"dhd","label":"辅助 kernel","short":"辅助","kinds":null,"what":"cat、sigmoid、输出 clone 等","impl":"torch","src":"","match":"_indptr_scan_all|_indices|_window_rows|_candidate_table_kernel|_unit_table_kernel|at::native|at::\\(anonymous|^(?:void )?at::|c10::|^triton_(?:poi|red|per)_fused|elementwise_kernel|CatArrayBatchedCopy|reduce_kernel|PostGSU|skreduce|splitk_reduce|__amd_rocclr_(?:fill|copy)","bucket":true}]}</script>
+</section>
+
 </main>
 </div>
 
@@ -1949,6 +2076,187 @@ return x, ffn_pre                                  <span class="c"># 交给下�
   document.querySelectorAll('[data-dep]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.dep; paint(); }));
   kIn.addEventListener('input', paint);
   paint();
+})();
+</script>
+<script>
+/* ---------- 附：ATOM op graph (layer x op matrix, optional per-op GPU time) ---------- */
+(function(){
+  const specEl = document.getElementById('opgraph-spec');
+  if (!specEl) return;
+  const S = JSON.parse(specEl.textContent);
+  const $ = id => document.getElementById(id);
+  const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const opById = Object.fromEntries(S.ops.map(o => [o.id, o]));
+  const rowById = Object.fromEntries(S.rows.map(r => [r.id, r]));
+  const kindLabel = Object.fromEntries(S.layout.kinds);
+  const state = { phase: 'decode', data: { prefill: null, decode: null } };
+  try { const p = localStorage.getItem('opg-phase'); if (p === 'prefill' || p === 'decode') state.phase = p; } catch (e) {}
+
+  /* the same rule trace_to_opgraph.py uses */
+  function applies(op, row, phase) {
+    if (op.phases && !op.phases.includes(phase)) return false;
+    if (typeof row === 'string') return op.group === row;
+    const rows = (op.rowsByPhase && op.rowsByPhase[phase]) || op.rows;
+    if (rows && rows.includes(row.id)) return true;
+    return !!(op.kinds && op.kinds.includes(row.kind));
+  }
+  const present = (op, row, phase) => !op.opt && !op.bucket && applies(op, row, phase) &&
+    (typeof row === 'string' || !op.shown || op.shown.includes(row.id));
+  const tailOnly = (row, op, phase) => phase === 'prefill' && row.tail && !(op.allRowsIn || []).includes(row.id);
+
+  const D = () => state.data[state.phase];
+  const cellData = (rowId, opId) => { const d = D(); return d && d.ops[rowId + '|' + opId]; };
+  const hasData = (opId) => { const d = D(); return !!d && Object.keys(d.ops).some(k => k.endsWith('|' + opId)); };
+  const otherOp = g => ({ id: g + '.other', group: g, label: '未匹配', short: '未匹配', what: '没有命中任何规则的 kernel', impl: '' });
+
+  /* columns of a group: ops that run somewhere, plus (with data) ops that only showed up in the data */
+  function columns(group, rows, phase) {
+    const cols = S.ops.filter(o => o.group === group &&
+      (rows.some(r => present(o, r, phase)) || hasData(o.id)));
+    if (D() && hasData(group + '.other')) cols.push(otherOp(group));
+    return cols;
+  }
+
+  /* sequential ramp for time: one hue, light -> dark (flips with the theme tokens), log bins */
+  const NB = 6;
+  let lo = 1, hi = 1;
+  const bin = us => { if (!(us > 0)) return -1; if (hi <= lo) return NB - 1; const t = (Math.log(us) - Math.log(lo)) / (Math.log(hi) - Math.log(lo)); return Math.min(NB - 1, Math.max(0, Math.floor(t * NB))); };
+  const fill = b => `color-mix(in oklab, var(--csa) ${Math.round(16 + b * (84 / (NB - 1)))}%, var(--surface))`;
+  const fmt = us => us >= 1000 ? (us / 1000).toFixed(2) + ' ms' : (us < 10 ? us.toFixed(1) : us.toFixed(0)) + ' µs';
+
+  function cell(row, op) {
+    const rowId = typeof row === 'string' ? row : row.id;
+    const on = op.id.endsWith('.other') ? false : present(op, row, state.phase);
+    const d = cellData(rowId, op.id);
+    let cls = 'opg-c', style = '';
+    if (d) { cls += ' has'; style = ` style="background:${fill(bin(d.us))}"`; if (!op.bucket && !op.opt && !op.id.endsWith('.other') && !applies(op, row, state.phase)) cls += ' odd'; }
+    else if (on && D()) cls += ' miss';
+    else if (on) cls += (typeof row !== 'string' && tailOnly(row, op, state.phase)) ? ' on tail' : ' on';
+    return `<i class="${cls}"${style} data-row="${rowId}" data-op="${op.id}"></i>`;
+  }
+
+  function draw() {
+    const phase = state.phase, d = D();
+    if (d) { const v = Object.values(d.ops).map(x => x.us).filter(x => x > 0); lo = Math.max(0.5, Math.min(...v)); hi = Math.max(...v); }
+    const rows = S.rows.filter(r => r.grid);
+    const cols = S.layout.grid.groups.map(g => ({ g, ops: columns(g, rows, phase) }));
+    const total = id => d ? Object.entries(d.ops).filter(([k]) => k.startsWith(id + '|')).reduce((s, [, x]) => s + x.us, 0) : 0;
+    const maxRow = Math.max(1, ...rows.map(r => total(r.id)));
+
+    let h = `<div class="opg-row opg-head"><span class="opg-lab"></span><span class="opg-tot">${d ? '每层 GPU 时间' : ''}</span>`;
+    cols.forEach(({ g, ops }) => {
+      if (!ops.length) return;
+      h += `<span class="opg-grp"><b>${esc(S.layout.groupLabels[g])}</b><span class="opg-cols">` +
+        ops.map(o => `<span class="opg-ch" data-op="${o.id}">${esc(o.short || o.label)}</span>`).join('') + '</span></span>';
+    });
+    h += '</div>';
+    let band = null;
+    rows.forEach(r => {
+      if (r.band !== band) { band = r.band; h += `<div class="opg-band">${esc(S.layout.bands[band])}</div>`; }
+      const t = total(r.id);
+      h += `<div class="opg-row"><span class="opg-lab" data-row="${r.id}">${r.tail && phase === 'prefill' ? '<small>尾</small>' : ''}<em class="m-${r.kind}">${esc(r.label)}</em></span>` +
+        `<span class="opg-tot">${d ? `<span class="opg-bar" style="width:${(t / maxRow * 40).toFixed(1)}px"></span><span>${t ? fmt(t) : '—'}</span>` : ''}</span>`;
+      cols.forEach(({ ops }) => { if (ops.length) h += '<span class="opg-cols">' + ops.map(o => cell(r, o)).join('') + '</span>'; });
+      h += '</div>';
+    });
+    $('opg-grid').innerHTML = h;
+    $('opg-grid').classList.toggle('nodata', !d);
+
+    const strip = g => {
+      const ops = S.ops.filter(o => o.group === g && (present(o, g, phase) || hasData(o.id)));
+      if (d && hasData(g + '.other')) ops.push(otherOp(g));
+      const t = total(g);
+      return `<div class="opg-srow"><span class="opg-slab">${esc(S.layout.groupLabels[g])}${d && t ? `<small>${fmt(t)}</small>` : ''}</span><span class="opg-strip">` +
+        ops.map(o => `<span class="opg-sc">${cell(g, o)}<span>${esc(o.short || o.label)}</span></span>`).join('') + '</span></div>';
+    };
+    $('opg-top').innerHTML = S.layout.strips.top.map(strip).join('');
+    $('opg-bottom').innerHTML = S.layout.strips.bottom.map(strip).join('');
+
+    const lg = $('opg-legend');
+    if (d) {
+      const edge = i => Math.exp(Math.log(lo) + (Math.log(hi) - Math.log(lo)) * i / NB);
+      lg.innerHTML = '<span>每格的 GPU 时间（对数分档）：</span>' +
+        Array.from({ length: NB }, (_, b) => `<span class="opg-key"><i style="background:${fill(b)}"></i>≥${fmt(edge(b))}</span>`).join('') +
+        '<span class="opg-key"><i class="opg-c miss"></i>算子表说该有，trace 里没有</span><span class="opg-key"><i class="opg-c odd"></i>trace 里有，算子表说这层不该有</span>';
+      const all = Object.values(d.ops).reduce((s, x) => s + x.us, 0);
+      const other = Object.entries(d.ops).filter(([k]) => k.endsWith('.other')).reduce((s, [, x]) => s + x.us, 0);
+      const s = d.source || {};
+      $('opg-status').textContent = `${d.phase}：${s.step || ''}，${s.steps > 1 ? s.steps + ' 步取中位数，' : ''}${s.kernels} 个 kernel，${s.halves} 个半层。kernel 时间合计 ${fmt(all)}，未匹配 ${fmt(other)}。`;
+    } else {
+      lg.innerHTML = '<span class="opg-key"><i class="opg-c on"></i>会跑</span>' +
+        (phase === 'prefill' ? '<span class="opg-key"><i class="opg-c on tail"></i>只跑每个 prompt 的最后 128 行</span>' : '') +
+        S.layout.kinds.map(([k, l]) => `<span class="opg-key"><em class="m-${k}">${esc(l)}</em></span>`).join('');
+      $('opg-status').textContent = (state.data.prefill || state.data.decode) ? '这个阶段没有加载数据，显示结构。' : '未加载数据，显示每层会跑哪些算子。悬停看实现和调用点。';
+    }
+  }
+
+  /* tooltip */
+  const wrap = $('opg-wrap'), tip = $('opg-tip');
+  function showTip(e) {
+    const t = e.target.closest('[data-op],[data-row]');
+    if (!t || !wrap.contains(t)) { tip.hidden = true; return; }
+    let h = '';
+    if (!t.dataset.op) {
+      const r = rowById[t.dataset.row];
+      h = `<b>${esc(r.label)} · ${esc(kindLabel[r.kind] || '')}</b>` + (r.note ? `<span>${esc(r.note)}</span>` : '');
+    } else {
+      const op = opById[t.dataset.op] || otherOp(t.dataset.op.split('.')[0]);
+      const rowId = t.dataset.row, r = rowId && rowById[rowId];
+      h = `<b>${esc(r ? r.label + ' · ' : '')}${esc(op.label)}</b>`;
+      if (op.what) h += `<span>${esc(op.what)}</span>`;
+      if (op.impl) h += `<code>${esc(op.impl)}</code>`;
+      if (op.src) h += `<small>${esc(op.src)}</small>`;
+      if (r && state.phase === 'prefill' && present(op, r, 'prefill')) h += `<small>${tailOnly(r, op, 'prefill') ? 'prefill：只跑尾部 128 行' : (r.tail ? 'prefill：跑全部行' : '')}</small>`;
+      const d = rowId && cellData(rowId, op.id);
+      if (d) h += `<span class="opg-tv">${fmt(d.us)} · ${d.n} 个 kernel</span>` + d.kernels.map(([n, us]) => `<small class="opg-k">${esc(n)} — ${fmt(us)}</small>`).join('');
+    }
+    tip.innerHTML = h; tip.hidden = false;
+    const box = wrap.getBoundingClientRect(), rc = t.getBoundingClientRect();
+    let x = rc.right - box.left + 10, y = rc.top - box.top - 6;
+    if (x + 330 > box.width) x = Math.max(4, rc.left - box.left - 340);
+    tip.style.left = x + 'px'; tip.style.top = Math.max(0, y) + 'px';
+  }
+  wrap.addEventListener('mouseover', showTip);
+  wrap.addEventListener('mouseleave', () => { tip.hidden = true; });
+
+  /* controls */
+  const setPhase = p => {
+    state.phase = p;
+    try { localStorage.setItem('opg-phase', p); } catch (e) {}
+    document.querySelectorAll('#opg-phase button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.phase === p)));
+    draw();
+  };
+  document.querySelectorAll('#opg-phase button').forEach(b => b.addEventListener('click', () => setPhase(b.dataset.phase)));
+  $('opg-file').addEventListener('change', async ev => {
+    let last = null;
+    for (const f of ev.target.files) {
+      try {
+        const j = JSON.parse(await f.text());
+        if (!j.ops || !j.phase) throw new Error('不是 trace_to_opgraph.py 的输出');
+        state.data[j.phase] = j; last = j.phase;
+      } catch (err) { $('opg-status').textContent = `${f.name}：${err.message}`; }
+    }
+    ev.target.value = '';
+    if (last) setPhase(last);
+  });
+  $('opg-clear').addEventListener('click', () => { state.data = { prefill: null, decode: null }; draw(); });
+
+  /* table view: every op, generated from the same spec */
+  const where = o => {
+    const parts = [];
+    if (o.kinds) parts.push(o.kinds.map(k => kindLabel[k]).join('、'));
+    if (o.rows) parts.push(o.rows.join('、'));
+    if (o.shown) parts.push('只在 ' + o.shown.join('、'));
+    if (!o.kinds && !o.rows) parts.push(S.layout.groupLabels[o.group]);
+    if (o.phases) parts.push('仅 ' + o.phases.join('/'));
+    if (o.opt) parts.push('旧 trace / 可选');
+    return parts.join('；');
+  };
+  $('opg-table').innerHTML = '<table><thead><tr><th>算子</th><th>做什么</th><th>实现（kernel）</th><th>调用点</th><th>出现在</th></tr></thead><tbody>' +
+    S.ops.map(o => `<tr><td><code>${esc(o.id)}</code><br>${esc(o.label)}</td><td>${esc(o.what)}</td><td><code>${esc(o.impl)}</code></td><td><code>${esc(o.src)}</code></td><td>${esc(where(o))}</td></tr>`).join('') +
+    '</tbody></table>';
+
+  setPhase(state.phase);
 })();
 </script>
 </body>
