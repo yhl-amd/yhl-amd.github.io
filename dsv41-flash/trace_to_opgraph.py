@@ -105,12 +105,17 @@ class Matcher:
         return [o for o in self.ops if o["group"] in groups and
                 (applies(o, row, self.phase) if row else applies(o, o["group"], self.phase))]
 
-    def match(self, row_id, groups, name, ctx_key):
-        """op dict, or None. Specific regex first, then class ordinal, then bucket."""
+    def match(self, row_id, groups, name, ctx_key, prev=None):
+        """op dict, or None. Specific regex first, then an op that must follow `prev`
+        (the op just before on this stream), then class ordinal, then bucket."""
         ops = self.ctx_ops(row_id, groups)
         for o in ops:
             if not o.get("bucket") and o["id"] in self.rx and self.rx[o["id"]].search(name):
                 return o
+        if prev and self.cls["fp8"].search(name):
+            for o in ops:
+                if o.get("after") == prev:
+                    return o
         for cls, rx in self.cls.items():
             if rx.search(name):
                 cands = [o for o in ops if o.get("cls") == cls]
@@ -170,7 +175,21 @@ def assign(spec, kernels, phase):
             qk, qctx = pending.pop(stream)
             put(qctx, m.match(qctx[0], qctx[1], qk["name"], qctx), [qk])
 
+    ar_rx = m.cls["ar"]
+    last_ar, cur = {}, -1  # half index -> index of its last "ar"-class kernel
+    for i, k in enumerate(kernels):
+        if m.half.search(k["name"]):
+            cur += 1
+        elif ar_rx.search(k["name"]):
+            last_ar[cur] = i
+    dispatch = next((o for o in m.ops if o["id"] == "ffn.ep_dispatch"), None)
+    streams = defaultdict(int)
     for k in kernels:
+        streams[k.get("args", {}).get("stream")] += 1
+    main = max(streams, key=streams.get) if streams else None
+    last_op = {}  # (context, stream) -> id of the op matched last there
+
+    for i, k in enumerate(kernels):
         name = k["name"]
         stream = k.get("args", {}).get("stream")
         if m.half.search(name):
@@ -189,14 +208,18 @@ def assign(spec, kernels, phase):
             out[(row, f"{group}.mhc_pre" if "mhc" in name else
                  ("attn.mono_pre" if "attn_pre" in name else "ffn.mono_post"))].append(k)
             continue
-        row, groups = ctx
+        if ctx != home and stream != main and home[0] != "pro":
+            ctx_k = home  # a side-stream kernel (shared expert) that ends after the half's collective
+        else:
+            ctx_k = ctx
+        row, groups = ctx_k
         o = m.anywhere(name, row)
         if o:
             out[("pro", o["id"])].append(k)
             continue
         if quant_rx.search(name):
             flush(stream)
-            pending[stream] = (k, ctx)
+            pending[stream] = (k, ctx_k)
             continue
         carry = []
         if stream in pending:
@@ -204,17 +227,23 @@ def assign(spec, kernels, phase):
                 carry = [pending.pop(stream)[0]]
             else:
                 flush(stream)
-        o = m.match(row, groups, name, ctx)
-        if (o is None or o.get("bucket")) and ctx == home:
+        if (ctx_k == home and groups[0] == "ffn" and dispatch is not None
+                and ar_rx.search(name) and last_ar.get(h) != i):
+            put(ctx_k, dispatch, carry + [k])  # not the half's last collective: DP token gather
+            continue
+        o = m.match(row, groups, name, ctx_k, last_op.get((ctx_k, stream)))
+        if (o is None or o.get("bucket")) and ctx_k == home and ctx == home:
             # no terminal seen (e.g. mono fuses the all-reduce): switch when the
             # kernel clearly belongs to what follows this half
             nxt = next_context(m, row, groups[0])
             if nxt:
                 o2 = m.match(nxt[0], nxt[1], name, nxt)
                 if o2 is not None and not o2.get("bucket"):
-                    ctx, o = nxt, o2
-        put(ctx, o, carry + [k])
-        if o is not None and o.get("terminal") and ctx == home:
+                    ctx = ctx_k = nxt
+                    o = o2
+        put(ctx_k, o, carry + [k])
+        last_op[(ctx_k, stream)] = o["id"] if o else None
+        if o is not None and o.get("terminal") and ctx == home and ctx_k == home and last_ar.get(h, i) == i:
             nxt = next_context(m, row, groups[0])
             if nxt:
                 ctx = nxt
