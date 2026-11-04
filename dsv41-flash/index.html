@@ -599,19 +599,93 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
 
   <p>严格来说，最后 128 个 token 在 L30 的 SWA KV 依赖它们在 L29 的结果，而后者又依赖更早的 token，精确计算要往前追 20 × 128 = 2560 个 token。V4.1 只补算最后 128 个，并把窗口截断在这里（Decoder SWA Bounded Replay，见 3.2）。</p>
 
-  <h4>编码器 m=2、解码器 m=1，结构不一样，不用重算吗？</h4>
-  <p>需要算，但不是“重算”：编码器和解码器用的是<b>两份不同的 KV</b>，各算各的。解码器的 m=1 KV 不是从编码器的 m=2 KV 转换来的。</p>
-  <div class="tbl"><table>
-    <thead><tr><th></th><th>编码器 KV①②③</th><th>解码器 KV④</th></tr></thead>
-    <tbody>
-      <tr><td>谁算</td><td>L2、L8、L14</td><td>L20</td></tr>
-      <tr><td>输入</td><td>各自那一层的隐状态</td><td>H<sub>20</sub>，也就是编码器的输出</td></tr>
-      <tr><td>压缩率</td><td>m=2</td><td>m=1（不压缩）</td></tr>
-      <tr><td>给谁用</td><td>编码器各层</td><td>解码器 L20–39</td></tr>
-      <tr><td>每 token 存储</td><td>3 × 178 B</td><td>356 B</td></tr>
-    </tbody>
-  </table></div>
-  <p>两份加起来就是 890 B/token。</p>
+  <h4>一共四份全局 KV，各由一层写</h4>
+  <p>KV④ 不是唯一的全局 KV。除了只有 SWA 的 L0、L1，每一层都要读一份全局 KV，但不是每层自己写：相邻几层编成一组，由组里第一层写一份，全组共用（这就是 2.2 节的 CSA2）。整个模型一共只有 4 份：</p>
+
+  <figure>
+    <div class="svgwrap">
+      <svg viewBox="0 0 880 266" role="img" aria-label="整个模型只有 4 份全局 KV。编码器的 KV①、KV②、KV③ 分别由 L2、L8、L14 从各自的输入算出，分别给 L2–7、L8–13、L14–19 读，m=2，每两个 token 合成一个 356 字节的 entry，每 token 178 字节。解码器的 KV④ 由 L20 从它的输入 H20（编码器输出）算出，给 L20–39 读，m=1，每个 token 一个 356 字节的 entry。合计每 token 890 字节。">
+        <text x="12" y="24" class="hd">谁写 · 谁读 · 从哪算</text>
+        <text x="760" y="24" class="hd">每 token</text>
+        <text x="354" y="24" class="sm" text-anchor="middle">t1</text>
+        <text x="406" y="24" class="sm" text-anchor="middle">t2</text>
+        <text x="458" y="24" class="sm" text-anchor="middle">t3</text>
+        <text x="510" y="24" class="sm" text-anchor="middle">t4</text>
+        <text x="562" y="24" class="sm" text-anchor="middle">t5</text>
+        <text x="614" y="24" class="sm" text-anchor="middle">t6</text>
+        <text x="666" y="24" class="sm" text-anchor="middle">t7</text>
+        <text x="718" y="24" class="sm" text-anchor="middle">t8</text>
+        <text x="12" y="54" class="sm2" style="fill:var(--csa);font-weight:600">KV①</text>
+        <text x="52" y="54" class="sm2">L2 写，L2–7 读</text>
+        <text x="12" y="69" class="sm">从 L2 的输入算 · m=2</text>
+        <rect x="330" y="40" width="100" height="32" rx="3" class="q-c"/>
+        <text x="380" y="60" class="sm2" text-anchor="middle">356 B</text>
+        <rect x="434" y="40" width="100" height="32" rx="3" class="q-c"/>
+        <text x="484" y="60" class="sm2" text-anchor="middle">356 B</text>
+        <rect x="538" y="40" width="100" height="32" rx="3" class="q-c"/>
+        <text x="588" y="60" class="sm2" text-anchor="middle">356 B</text>
+        <rect x="642" y="40" width="100" height="32" rx="3" class="q-c"/>
+        <text x="692" y="60" class="sm2" text-anchor="middle">356 B</text>
+        <text x="760" y="60" class="sm2">356 ÷ 2 = 178 B</text>
+        <text x="12" y="98" class="sm2" style="fill:var(--csa);font-weight:600">KV②</text>
+        <text x="52" y="98" class="sm2">L8 写，L8–13 读</text>
+        <text x="12" y="113" class="sm">从 L8 的输入算 · m=2</text>
+        <rect x="330" y="84" width="100" height="32" rx="3" class="q-c"/>
+        <text x="380" y="104" class="sm2" text-anchor="middle">356 B</text>
+        <rect x="434" y="84" width="100" height="32" rx="3" class="q-c"/>
+        <text x="484" y="104" class="sm2" text-anchor="middle">356 B</text>
+        <rect x="538" y="84" width="100" height="32" rx="3" class="q-c"/>
+        <text x="588" y="104" class="sm2" text-anchor="middle">356 B</text>
+        <rect x="642" y="84" width="100" height="32" rx="3" class="q-c"/>
+        <text x="692" y="104" class="sm2" text-anchor="middle">356 B</text>
+        <text x="760" y="104" class="sm2">356 ÷ 2 = 178 B</text>
+        <text x="12" y="142" class="sm2" style="fill:var(--csa);font-weight:600">KV③</text>
+        <text x="52" y="142" class="sm2">L14 写，L14–19 读</text>
+        <text x="12" y="157" class="sm">从 L14 的输入算 · m=2</text>
+        <rect x="330" y="128" width="100" height="32" rx="3" class="q-c"/>
+        <text x="380" y="148" class="sm2" text-anchor="middle">356 B</text>
+        <rect x="434" y="128" width="100" height="32" rx="3" class="q-c"/>
+        <text x="484" y="148" class="sm2" text-anchor="middle">356 B</text>
+        <rect x="538" y="128" width="100" height="32" rx="3" class="q-c"/>
+        <text x="588" y="148" class="sm2" text-anchor="middle">356 B</text>
+        <rect x="642" y="128" width="100" height="32" rx="3" class="q-c"/>
+        <text x="692" y="148" class="sm2" text-anchor="middle">356 B</text>
+        <text x="760" y="148" class="sm2">356 ÷ 2 = 178 B</text>
+        <text x="12" y="202" class="sm2" style="fill:var(--csa);font-weight:600">KV④</text>
+        <text x="52" y="202" class="sm2">L20 写，L20–39 读</text>
+        <text x="12" y="217" class="sm">从 L20 的输入 H₂₀（编码器输出）算 · m=1</text>
+        <rect x="330" y="188" width="48" height="32" rx="3" class="f-full"/>
+        <text x="354" y="208" class="sm2 t-inv" text-anchor="middle">356 B</text>
+        <rect x="382" y="188" width="48" height="32" rx="3" class="f-full"/>
+        <text x="406" y="208" class="sm2 t-inv" text-anchor="middle">356 B</text>
+        <rect x="434" y="188" width="48" height="32" rx="3" class="f-full"/>
+        <text x="458" y="208" class="sm2 t-inv" text-anchor="middle">356 B</text>
+        <rect x="486" y="188" width="48" height="32" rx="3" class="f-full"/>
+        <text x="510" y="208" class="sm2 t-inv" text-anchor="middle">356 B</text>
+        <rect x="538" y="188" width="48" height="32" rx="3" class="f-full"/>
+        <text x="562" y="208" class="sm2 t-inv" text-anchor="middle">356 B</text>
+        <rect x="590" y="188" width="48" height="32" rx="3" class="f-full"/>
+        <text x="614" y="208" class="sm2 t-inv" text-anchor="middle">356 B</text>
+        <rect x="642" y="188" width="48" height="32" rx="3" class="f-full"/>
+        <text x="666" y="208" class="sm2 t-inv" text-anchor="middle">356 B</text>
+        <rect x="694" y="188" width="48" height="32" rx="3" class="f-full"/>
+        <text x="718" y="208" class="sm2 t-inv" text-anchor="middle">356 B</text>
+        <text x="760" y="208" class="sm2">356 ÷ 1 = 356 B</text>
+        <line class="grid" x1="12" y1="176" x2="868" y2="176"/>
+        <text x="866" y="172" class="sm" text-anchor="end">编码器 ↑　解码器 ↓</text>
+        <line class="ln" x1="760" y1="234" x2="866" y2="234"/>
+        <text x="760" y="252" class="sm2" style="font-weight:600">合计 890 B</text>
+        <text x="12" y="252" class="sm">每个 entry 都是 356 B = 288 B 主 KV（512 维 FP4）+ 68 B indexer K（128 维 FP4）</text>
+      </svg>
+    </div>
+    <figcaption>每一行是一份全局 KV，方块是其中的 entry，横轴是 8 个相邻的 token。编码器的三份每两个 token 合成一个 entry，解码器的 KV④ 每个 token 一个。</figcaption>
+  </figure>
+
+  <ul>
+    <li><b>m 是压缩率</b>：每 m 个相邻 token 合成一个 entry。编码器的三份 m=2，所以 entry 数是 token 数的一半；KV④ 的 m=1，一个 token 一个 entry。</li>
+    <li><b>四份互相独立</b>：每份都由写它的那一层用自己的权重、从自己的输入算出来。KV④ 不是从 ①②③ 转换来的，L20 也不需要重算编码器的 KV，各写各的。</li>
+    <li><b>每 token 的字节数</b>：每个 entry 都是 356 B，组成见 3.5 节。m=2 时两个 token 分摊一个 entry，每 token 178 B；m=1 时每 token 356 B。四份加起来是 3 × 178 + 356 = 890 B/token。</li>
+  </ul>
   <p><b>KV④ 很便宜：每个 token 只做一次投影</b>，不需要 attention，也不需要 MoE。L20 的压缩器在 m=1 时就是：</p>
 <pre>if ratio == 1:
     return self.norm(self.wkv(x))   <span class="c"># 5120 → 512，再 RMSNorm；之后加 RoPE、量化成 FP4</span></pre>
