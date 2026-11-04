@@ -390,8 +390,8 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
       <li><a href="#d-fp4"><span>3.5</span>FP4 与 890 B（图 1b）</a></li>
       <li><a href="#d-replay"><span>3.6</span>SWA 依赖链与 Bounded Replay</a></li>
       <li><a href="#d-mhc"><span>3.7</span>Single-Pass mHC</a></li>
-      <li><a href="#d-engram"><span>3.8</span>Engram</a></li>
-      <li><a href="#d-dspark"><span>3.9</span>DSpark</a></li>
+      <li><a href="#d-engram"><span>3.8</span>Engram：n-gram 查表</a></li>
+      <li><a href="#d-dspark"><span>3.9</span>DSpark：一次猜 5 个</a></li>
       <li><a href="#d-moe"><span>3.10</span>MoE 与多模态</a></li>
       <li><a href="#d-deploy"><span>3.11</span>部署与代码生态</a></li>
       <li><a href="#d-open"><span>附</span>未确认的问题与来源</a></li>
@@ -971,12 +971,12 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
     </div>
     <div class="card">
       <h5>Engram</h5>
-      <p>用前 2–4 个 token 组成 n-gram，哈希后去一张巨大的表里取向量，加回隐状态。196B 参数，只放在第 1 层和第 14 层。</p>
-      <div class="ex">“the cat sat” → 哈希 (cat, sat)、(the, cat, sat)…<br>→ 查表 → 门控 → 加到 h<br>表放在 host 内存，通过 RDMA 预取</div>
+      <p>当前 token 和前面 1–3 个 token 组成 3 个 n-gram，哈希后去一张巨大的表里取 24 行向量，经过门控加回 4 路残差。196B 参数，只在第 1 层和第 14 层。<a href="#d-engram">详见 3.8</a></p>
+      <div class="ex">“on the cat sat” → 哈希 (cat, sat)、(the, cat, sat)、(on, the, cat, sat)<br>→ 24 个行号 → 查表 → 门控 → 加到残差<br>取哪几行只看 token id，表放在 host 内存提前取</div>
     </div>
     <div class="card">
       <h5>DSpark</h5>
-      <p>取代 MTP 的投机解码头。3 个小 Transformer block 读取第 37–39 层的隐状态，一次前向并行草拟 5 个位置，再由主模型验证。</p>
+      <p>取代 MTP 的投机解码草稿器。3 个小 block 读取第 37–39 层输入处的隐状态，一次前向并行草拟 5 个位置，主模型下一步一次验证。<a href="#d-dspark">详见 3.9</a></p>
       <div class="ex">Markov 头：建模相邻草稿之间的依赖<br>置信度头：预测每个位置被接受的概率<br>→ 按请求动态决定验证长度</div>
     </div>
   </div>
@@ -1564,38 +1564,316 @@ return x, ffn_pre                                  <span class="c"># 交给下�
 
 <section class="sec" id="d-engram">
   <div class="sec-no">3.8</div>
-  <h3>Engram</h3>
-  <p class="gist">一种“条件记忆”：用 n-gram 的哈希去巨大的嵌入表里取向量。论文的说法是把“记忆”和“计算”解耦。关键性质是<b>寻址是确定性的，只依赖输入 token 序列</b>，所以前向开始之前就能知道要取哪些行，表可以放在 host 内存里提前取。</p>
+  <h3>Engram：按 n-gram 查表，再用门加回残差</h3>
+  <p class="gist">一句话：Engram 是一块“查表记忆”。每个 token 和它前面 1–3 个 token 组成 3 个 n-gram，哈希后到两张大表里各取 24 行向量，投影后经过一个门加回残差。表里有 196B 参数，但每个 token 每层只取 24 行；而且取哪几行只由 token id 决定，前向开始之前就能算出来，所以表可以放在 host 内存里边算边取。</p>
+
+  <figure>
+    <div class="svgwrap">
+      <svg viewBox="0 0 900 380" role="img" aria-label="Engram 一个 token 的计算：以 t 结尾的 2、3、4-gram 各算一个哈希值，各对 8 个不同质数取模，得到 24 个行号；到 host 内存里的大表取出 24 行 256 维向量，拼成 6144 维；wkv 投影成 4 个 key 和 1 个 value；4 路 mHC 残差各用自己的 key 算一个门 g，再加上 g 乘 value。">
+        <defs><marker id="eA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <text x="20" y="26" class="hd">① 以 t 结尾的 3 个 n-gram</text>
+        <rect x="20" y="52" width="46" height="28" rx="3" class="n-op"/>
+        <text x="43.0" y="71" class="sm2" text-anchor="middle">on</text>
+        <rect x="70" y="52" width="46" height="28" rx="3" class="n-op"/>
+        <text x="93.0" y="71" class="sm2" text-anchor="middle">the</text>
+        <rect x="120" y="52" width="46" height="28" rx="3" class="n-op"/>
+        <text x="143.0" y="71" class="sm2" text-anchor="middle">cat</text>
+        <rect x="170" y="52" width="46" height="28" rx="3" class="n-new"/>
+        <text x="193.0" y="71" class="sm2" text-anchor="middle">sat</text>
+        <text x="193.0" y="46" class="sm" text-anchor="middle" style="fill:var(--rope)">t</text>
+        <line x1="120" y1="98" x2="216" y2="98" style="stroke:var(--csa-soft);stroke-width:5;stroke-linecap:round"/>
+        <text x="120" y="93" class="sm">2-gram</text>
+        <line x1="70" y1="117" x2="216" y2="117" style="stroke:var(--csa-mid);stroke-width:5;stroke-linecap:round"/>
+        <text x="70" y="112" class="sm">3-gram</text>
+        <line x1="20" y1="136" x2="216" y2="136" style="stroke:var(--csa);stroke-width:5;stroke-linecap:round"/>
+        <text x="20" y="131" class="sm">4-gram</text>
+        <text x="20" y="168" class="sm">先把 token id 归一化成</text>
+        <text x="20" y="183" class="sm">压缩 id（99,092 种）</text>
+        <text x="250" y="26" class="hd">② 哈希成 24 个行号</text>
+        <path d="M222,66 H242" class="ln" marker-end="url(#eA)"/>
+        <text x="250" y="66" class="sm">2-gram 的哈希值</text>
+        <text x="250" y="80" class="sm">mod 8 个不同质数 →</text>
+        <rect x="378" y="58" width="9" height="16" rx="2" style="fill:var(--csa-soft);stroke:var(--csa)"/>
+        <rect x="389" y="58" width="9" height="16" rx="2" style="fill:var(--csa-soft);stroke:var(--csa)"/>
+        <rect x="400" y="58" width="9" height="16" rx="2" style="fill:var(--csa-soft);stroke:var(--csa)"/>
+        <rect x="411" y="58" width="9" height="16" rx="2" style="fill:var(--csa-soft);stroke:var(--csa)"/>
+        <rect x="422" y="58" width="9" height="16" rx="2" style="fill:var(--csa-soft);stroke:var(--csa)"/>
+        <rect x="433" y="58" width="9" height="16" rx="2" style="fill:var(--csa-soft);stroke:var(--csa)"/>
+        <rect x="444" y="58" width="9" height="16" rx="2" style="fill:var(--csa-soft);stroke:var(--csa)"/>
+        <rect x="455" y="58" width="9" height="16" rx="2" style="fill:var(--csa-soft);stroke:var(--csa)"/>
+        <text x="250" y="100" class="sm">3-gram 的哈希值</text>
+        <text x="250" y="114" class="sm">mod 8 个不同质数 →</text>
+        <rect x="378" y="92" width="9" height="16" rx="2" style="fill:var(--csa-mid);stroke:var(--csa)"/>
+        <rect x="389" y="92" width="9" height="16" rx="2" style="fill:var(--csa-mid);stroke:var(--csa)"/>
+        <rect x="400" y="92" width="9" height="16" rx="2" style="fill:var(--csa-mid);stroke:var(--csa)"/>
+        <rect x="411" y="92" width="9" height="16" rx="2" style="fill:var(--csa-mid);stroke:var(--csa)"/>
+        <rect x="422" y="92" width="9" height="16" rx="2" style="fill:var(--csa-mid);stroke:var(--csa)"/>
+        <rect x="433" y="92" width="9" height="16" rx="2" style="fill:var(--csa-mid);stroke:var(--csa)"/>
+        <rect x="444" y="92" width="9" height="16" rx="2" style="fill:var(--csa-mid);stroke:var(--csa)"/>
+        <rect x="455" y="92" width="9" height="16" rx="2" style="fill:var(--csa-mid);stroke:var(--csa)"/>
+        <text x="250" y="134" class="sm">4-gram 的哈希值</text>
+        <text x="250" y="148" class="sm">mod 8 个不同质数 →</text>
+        <rect x="378" y="126" width="9" height="16" rx="2" style="fill:var(--csa);stroke:var(--csa)"/>
+        <rect x="389" y="126" width="9" height="16" rx="2" style="fill:var(--csa);stroke:var(--csa)"/>
+        <rect x="400" y="126" width="9" height="16" rx="2" style="fill:var(--csa);stroke:var(--csa)"/>
+        <rect x="411" y="126" width="9" height="16" rx="2" style="fill:var(--csa);stroke:var(--csa)"/>
+        <rect x="422" y="126" width="9" height="16" rx="2" style="fill:var(--csa);stroke:var(--csa)"/>
+        <rect x="433" y="126" width="9" height="16" rx="2" style="fill:var(--csa);stroke:var(--csa)"/>
+        <rect x="444" y="126" width="9" height="16" rx="2" style="fill:var(--csa);stroke:var(--csa)"/>
+        <rect x="455" y="126" width="9" height="16" rx="2" style="fill:var(--csa);stroke:var(--csa)"/>
+        <text x="250" y="168" class="sm">每个 (n-gram 阶, head) 占表里一段</text>
+        <text x="250" y="183" class="sm">互不重叠、长度为质数（约 1600 万行）</text>
+        <text x="486" y="26" class="hd">③ 查表</text>
+        <rect x="500" y="40" width="74" height="150" rx="3" class="n-op"/>
+        <rect x="502" y="45" width="70" height="3" style="fill:var(--csa-soft)"/>
+        <rect x="502" y="59" width="70" height="3" style="fill:var(--csa-soft)"/>
+        <rect x="502" y="67" width="70" height="3" style="fill:var(--csa-soft)"/>
+        <rect x="502" y="81" width="70" height="3" style="fill:var(--csa-soft)"/>
+        <rect x="502" y="95" width="70" height="3" style="fill:var(--csa-soft)"/>
+        <rect x="502" y="103" width="70" height="3" style="fill:var(--csa-soft)"/>
+        <rect x="502" y="111" width="70" height="3" style="fill:var(--csa-soft)"/>
+        <rect x="502" y="128" width="70" height="3" style="fill:var(--csa-soft)"/>
+        <rect x="502" y="49" width="70" height="3" style="fill:var(--csa-mid)"/>
+        <rect x="502" y="74" width="70" height="3" style="fill:var(--csa-mid)"/>
+        <rect x="502" y="87" width="70" height="3" style="fill:var(--csa-mid)"/>
+        <rect x="502" y="99" width="70" height="3" style="fill:var(--csa-mid)"/>
+        <rect x="502" y="120" width="70" height="3" style="fill:var(--csa-mid)"/>
+        <rect x="502" y="135" width="70" height="3" style="fill:var(--csa-mid)"/>
+        <rect x="502" y="144" width="70" height="3" style="fill:var(--csa-mid)"/>
+        <rect x="502" y="158" width="70" height="3" style="fill:var(--csa-mid)"/>
+        <rect x="502" y="54" width="70" height="3" style="fill:var(--csa)"/>
+        <rect x="502" y="78" width="70" height="3" style="fill:var(--csa)"/>
+        <rect x="502" y="106" width="70" height="3" style="fill:var(--csa)"/>
+        <rect x="502" y="117" width="70" height="3" style="fill:var(--csa)"/>
+        <rect x="502" y="139" width="70" height="3" style="fill:var(--csa)"/>
+        <rect x="502" y="152" width="70" height="3" style="fill:var(--csa)"/>
+        <rect x="502" y="167" width="70" height="3" style="fill:var(--csa)"/>
+        <rect x="502" y="180" width="70" height="3" style="fill:var(--csa)"/>
+        <path d="M470,92 H494" class="ln" marker-end="url(#eA)"/>
+        <text x="537.0" y="206" class="sm" text-anchor="middle">每层一张：3.84 亿行</text>
+        <text x="537.0" y="220" class="sm" text-anchor="middle">× 256 维 FP8，放 host 内存</text>
+        <text x="664" y="26" class="hd">④ 投影成 key 和 value</text>
+        <path d="M578,110 H658" class="ln" marker-end="url(#eA)"/>
+        <text x="619.0" y="102" class="sm" text-anchor="middle">24 行拼成</text>
+        <text x="619.0" y="126" class="sm" text-anchor="middle">[6144]</text>
+        <rect x="664" y="88" width="120" height="44" rx="4" class="n-op"/>
+        <text x="724" y="106" class="sm2" text-anchor="middle">wkv GEMM</text>
+        <text x="724" y="122" class="sm" text-anchor="middle">6144 → 5 × 5120</text>
+        <rect x="810" y="50" width="52" height="20" rx="3" class="n-kv"/>
+        <text x="836" y="64" class="sm2" text-anchor="middle">k1</text>
+        <rect x="810" y="76" width="52" height="20" rx="3" class="n-kv"/>
+        <text x="836" y="90" class="sm2" text-anchor="middle">k2</text>
+        <rect x="810" y="102" width="52" height="20" rx="3" class="n-kv"/>
+        <text x="836" y="116" class="sm2" text-anchor="middle">k3</text>
+        <rect x="810" y="128" width="52" height="20" rx="3" class="n-kv"/>
+        <text x="836" y="142" class="sm2" text-anchor="middle">k4</text>
+        <rect x="810" y="158" width="52" height="20" rx="3" class="n-new"/>
+        <text x="836" y="172" class="sm2" text-anchor="middle">v</text>
+        <path d="M784,110 H804" class="ln" marker-end="url(#eA)"/>
+        <text x="20" y="228" class="hd">⑤ 4 路 mHC 残差各开一个门，加上同一个 v</text>
+        <text x="20" y="254" class="sm2">r1</text>
+        <line x1="44" y1="250" x2="590" y2="250" class="ln"/>
+        <circle cx="610" cy="250" r="11" class="n-new"/>
+        <text x="610" y="254" class="sm" text-anchor="middle">g1</text>
+        <path d="M621,250 H750" class="ln" marker-end="url(#eA)"/>
+        <text x="758" y="254" class="sm2">r1 + g1·v</text>
+        <text x="20" y="280" class="sm2">r2</text>
+        <line x1="44" y1="276" x2="590" y2="276" class="ln"/>
+        <circle cx="610" cy="276" r="11" class="n-new"/>
+        <text x="610" y="280" class="sm" text-anchor="middle">g2</text>
+        <path d="M621,276 H750" class="ln" marker-end="url(#eA)"/>
+        <text x="758" y="280" class="sm2">r2 + g2·v</text>
+        <text x="20" y="306" class="sm2">r3</text>
+        <line x1="44" y1="302" x2="590" y2="302" class="ln"/>
+        <circle cx="610" cy="302" r="11" class="n-new"/>
+        <text x="610" y="306" class="sm" text-anchor="middle">g3</text>
+        <path d="M621,302 H750" class="ln" marker-end="url(#eA)"/>
+        <text x="758" y="306" class="sm2">r3 + g3·v</text>
+        <text x="20" y="332" class="sm2">r4</text>
+        <line x1="44" y1="328" x2="590" y2="328" class="ln"/>
+        <circle cx="610" cy="328" r="11" class="n-new"/>
+        <text x="610" y="332" class="sm" text-anchor="middle">g4</text>
+        <path d="M621,328 H750" class="ln" marker-end="url(#eA)"/>
+        <text x="758" y="332" class="sm2">r4 + g4·v</text>
+        <path d="M836,180 V220 H610 V238" class="ln dash" marker-end="url(#eA)"/>
+        <text x="840" y="216" class="sm">k1–k4、v</text>
+        <text x="80" y="362" class="sm">g_j = sigmoid( 带符号开方( r_j 与 k_j 的归一化点积 ) )，图像 token 的 g 恒为 0</text>
+      </svg>
+    </div>
+    <figcaption>一个 token（t = “sat”）在 L1 或 L14 的 Engram 计算。①② 只用到 token id，③ 从 host 内存取数，④⑤ 在 GPU 上算。颜色深浅区分 2/3/4-gram 取回的行。</figcaption>
+  </figure>
+
+  <h4>① ② 寻址：哈希出 24 个行号</h4>
   <ul>
-    <li>196B 参数平均分给 2 个模块，位于第 1 层和第 14 层。n-gram 阶数 {2, 3, 4}，每阶 8 个哈希 head、共 2048 维；每个 head 一张约 16M 行的表，表长取互不相同的质数；嵌入表和 K/V 投影都是 FP8。</li>
-    <li>沿用原版 Engram 的 tokenizer 压缩、多 head 哈希、上下文门控和多分支融合；去掉了短因果卷积，因为收益抵不上它给推理栈带来的复杂度。</li>
+    <li>先把 token id 归一化成“压缩 id”（NFKC、去重音、小写、合并空白），共 99,092 种，“ The”“the”“THE” 映射到同一个 id。</li>
+    <li>位置 t 取以它结尾的 2-gram、3-gram、4-gram。每个回看位置乘一个固定的奇数，滚动 XOR：第 i 步的结果就是 (i+1)-gram 的哈希值。</li>
+    <li>每个 n-gram 的哈希值再对 <b>8 个不同的质数</b>取模，得到 8 个行号（8 个“head”）。3 × 8 = 24 个行号，每个 (n-gram 阶, head) 在表里占一段互不重叠、长度为质数的区间（约 1600 万行）。同一个 n-gram 在 8 个 head 上同时和别的 n-gram 冲突的可能性很小，这是多头哈希的常见理由（论文没有展开，属推断）。</li>
+    <li>序列开头、图像 token 处回看不到足够的历史，对应位置填 pad；n-gram 不会跨过图像。</li>
   </ul>
-  <div class="flow">
-    <span>token id</span><em>归一化（NFKC、去重音、小写、合并空白）→</em>
-    <span>压缩 id（99,092 种）</span><em>× 每层每个回看位置一个奇数乘子 →</em>
-    <span>滚动 XOR</span><em>第 i 步即 (i+1)-gram →</em>
-    <span>mod 质数 + offset</span><em>→</em>
-    <span class="hot">表中的行号</span>
-  </div>
+<pre>tokens   = 最近 4 个压缩 id，回看被阻断处填 pad           <span class="c"># [T, 4]</span>
+rolling  = tokens[0]·m0
+for i in 1..3:
+    rolling ^= tokens[i]·m_i                            <span class="c"># 第 i 步 = (i+1)-gram 的哈希</span>
+    rows    += rolling mod prime[i][0..7] + offset       <span class="c"># 8 个 head，各一段质数长的区间</span></pre>
+
+  <h4>③ 查表：两张表，196B 参数</h4>
   <ul>
-    <li>归一化后，“ The”、“the”、“THE” 映射到同一个 id。序列开头或图像 token 处没有足够历史，回看位置被阻断并填 pad。</li>
-    <li>前向时在 block 之前调用：<code>h = layer.engram(h, engram_hashes[:, :, layer.engram.layer_hash_index, :], engram_mask)</code>。</li>
-    <li><b>推理</b>：通过后台 RDMA 从 host 内存预取；第一个模块（L1）的预取和第一个 Transformer block 的计算重叠。取回的 FP8 值和 scale 直接交给后面的 GEMM。RL rollout 时表常驻 GPU，避免 host 内存碎片导致的 OOM。</li>
-    <li><b>vLLM</b>：异步预取与解码器计算重叠；同一台机器上的多个 DP 副本共享一份 host 表；透明大页让 prefill 查表 kernel 最多快 10×。</li>
+    <li>每个模块一张表：384,006,168 行 × 256 维，FP8（每 32 维一个 scale）。约 98.3B 参数，两个模块合计 196.6B，和论文的 196B 对得上（推算核对）。</li>
+    <li>每个 token 取 24 行，拼成 24 × 256 = 6144 维。</li>
+  </ul>
+
+  <h4>④ ⑤ 投影与门控：4 路残差各取所需</h4>
+  <ul>
+    <li><code>wkv</code> 把 6144 维投影成 5 × 5120：4 个 key（每路 mHC 残差一个）和 1 个共享的 value。</li>
+    <li>第 j 路残差 r<sub>j</sub> 用自己的 key k<sub>j</sub> 算门：两者各自 RMS 归一化后，按可学的权重 w 逐维相乘求和，再除以 √5120，得到 dot<sub>j</sub>；g<sub>j</sub> = sigmoid(sign(dot<sub>j</sub>) · √|dot<sub>j</sub>|)。</li>
+    <li>r<sub>j</sub> ← r<sub>j</sub> + g<sub>j</sub> · v。4 路用同一个 v，但各自决定加多少，这就是论文说的“上下文门控”和“多分支融合”。图像 token 的 g 恒为 0。</li>
+    <li>没有短因果卷积（原版 Engram 有，V4.1 去掉了，收益抵不上它给推理栈带来的复杂度），也没有单独的 norm。</li>
+  </ul>
+<pre>key, value = wkv(rows.flatten()).split([4·5120, 5120])  <span class="c"># 4 个 key + 1 个 value</span>
+dot  = (r · w · key).sum(-1) · rstd(r) · rstd(key) / √5120   <span class="c"># 每路残差各一个</span>
+gate = sigmoid(sign(dot) · sqrt(|dot|))
+r    = r + gate · value</pre>
+
+  <h4>放在哪、怎么部署</h4>
+  <ul>
+    <li><b>位置</b>：L1 和 L14 的 attention 之前。论文说选这两层是为了训练时平衡各流水线阶段的显存。门要读“结清后”的残差，所以这两层前面要先单独做一次 mHC post，不能像其他层那样折进下一个接缝。</li>
+    <li><b>论文</b>：表放在 host 内存，后台 RDMA 预取；L1 的预取和第一个 block 的计算重叠。取回的 FP8 值和 scale 直接交给后面的 GEMM。RL rollout 时表常驻 GPU，避免 host 内存碎片导致 OOM。</li>
+    <li><b>ATOM</b>：哈希在 GPU 上算；查表用 UVA 直接读 pinned host 内存，每个 TP rank 只读自己负责的 6 个 head，再 all-gather 成 [T, 6144]。这些都在副 stream 上：L1 的查表和 L0 重叠，L14 的和 L1–13 重叠。decode 时每个请求的状态里存着最近 3 个压缩 id，新 token 才能接着组 n-gram；投机解码时按接受长度提交（见附录算子图的 prologue 和“层前置”）。</li>
+    <li><b>vLLM</b>：同一台机器上的多个 DP 副本共享一份 host 表；透明大页让 prefill 查表 kernel 最多快 10×。</li>
+    <li><b>开销（推算）</b>：每个模块每个 token 从 host 读 24 × (256 + 8) B ≈ 6.3 KB，算一次 6144 × 25600 的 FP8 GEMM（约 1.6 亿次乘加，约为一层 MoE 激活计算量的 2/3）。一个 16K token 的 prefill chunk 每个模块要读约 100 MB，所以预取和计算重叠很重要。</li>
   </ul>
 </section>
 
 <section class="sec" id="d-dspark">
   <div class="sec-no">3.9</div>
-  <h3>DSpark</h3>
+  <h3>DSpark：一次前向猜 5 个 token</h3>
+  <p class="gist">一句话：DSpark 是 V4.1 的投机解码草稿器。它用 3 个小 block <b>一次前向同时猜出 5 个位置</b>，再用一个很小的 Markov 头把相邻 token 之间的依赖补上；主模型下一步一次 forward 验证这 5 个，接受匹配的前缀。草稿器看历史不读自己的 KV，而是读主模型 L37–39 的隐状态。</p>
+
+  <figure>
+    <div class="svgwrap">
+      <svg viewBox="0 0 900 360" role="img" aria-label="DSpark 一步 decode 的数据流。主模型对每个请求算 6 行：上一步的 token a 和 5 个草稿 d1 到 d5，在每行采样并从 d1 开始比对，接受匹配的前缀并加上主模型在第一个不匹配处的采样，本例产出 3 个 token。主模型 L37 到 L39 输入处的隐状态经 main_proj 写进 3 个草稿窗口。草稿器的输入是 [s3, 4 个 noise token]，3 个 block 一次前向得到 5 个位置的基础 logits，Markov 头再按顺序逐个采样出 5 个新草稿，作为下一步主模型的输入。">
+        <defs><marker id="dA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <text x="14" y="34" class="hd">主模型</text>
+        <text x="14" y="50" class="sm">第 n 步</text>
+        <rect x="80" y="24" width="40" height="26" rx="3" class="n-op"/>
+        <text x="100.0" y="42" class="sm2" text-anchor="middle">a</text>
+        <rect x="124" y="24" width="40" height="26" rx="3" class="n-kv"/>
+        <text x="144.0" y="42" class="sm2" text-anchor="middle">d1</text>
+        <rect x="168" y="24" width="40" height="26" rx="3" class="n-kv"/>
+        <text x="188.0" y="42" class="sm2" text-anchor="middle">d2</text>
+        <rect x="212" y="24" width="40" height="26" rx="3" class="n-kv"/>
+        <text x="232.0" y="42" class="sm2" text-anchor="middle">d3</text>
+        <rect x="256" y="24" width="40" height="26" rx="3" class="n-kv"/>
+        <text x="276.0" y="42" class="sm2" text-anchor="middle">d4</text>
+        <rect x="300" y="24" width="40" height="26" rx="3" class="n-kv"/>
+        <text x="320.0" y="42" class="sm2" text-anchor="middle">d5</text>
+        <text x="80" y="68" class="sm">每个请求 6 行：上一步的 token a + 5 个草稿</text>
+        <path d="M348,37 H360" class="ln" marker-end="url(#dA)"/>
+        <rect x="364" y="20" width="118" height="34" rx="4" class="n-op"/>
+        <text x="423" y="41" class="sm2" text-anchor="middle">40 层 forward</text>
+        <path d="M482,37 H498" class="ln" marker-end="url(#dA)"/>
+        <rect x="504" y="24" width="40" height="26" rx="3" class="n-new"/>
+        <text x="524.0" y="42" class="sm2" text-anchor="middle">s1</text>
+        <text x="524.0" y="68" class="sm2" text-anchor="middle" style="fill:var(--swa)">✓</text>
+        <rect x="548" y="24" width="40" height="26" rx="3" class="n-new"/>
+        <text x="568.0" y="42" class="sm2" text-anchor="middle">s2</text>
+        <text x="568.0" y="68" class="sm2" text-anchor="middle" style="fill:var(--swa)">✓</text>
+        <rect x="592" y="24" width="40" height="26" rx="3" class="n-new"/>
+        <text x="612.0" y="42" class="sm2" text-anchor="middle">s3</text>
+        <text x="612.0" y="68" class="sm2" text-anchor="middle" style="fill:var(--rope)">✗</text>
+        <rect x="636" y="24" width="40" height="26" rx="3" class="n-op"/>
+        <text x="656.0" y="42" class="sm2" text-anchor="middle">s4</text>
+        <rect x="680" y="24" width="40" height="26" rx="3" class="n-op"/>
+        <text x="700.0" y="42" class="sm2" text-anchor="middle">s5</text>
+        <rect x="724" y="24" width="40" height="26" rx="3" class="n-op"/>
+        <text x="744.0" y="42" class="sm2" text-anchor="middle">s6</text>
+        <text x="504" y="86" class="sm">每行采样：s1 = d1 ✓，s2 = d2 ✓，s3 ≠ d3 ✗</text>
+        <text x="504" y="102" class="sm2">→ 接受 d1、d2，加上 s3，本步产出 3 个 token</text>
+        <path d="M423,54 V150" class="ln dash" marker-end="url(#dA)"/>
+        <text x="415" y="104" class="sm" text-anchor="end">L37、L38、L39 输入处的隐状态</text>
+        <text x="415" y="119" class="sm" text-anchor="end">（4 路 mHC 取平均，拼成 15360 维）</text>
+        <rect x="273" y="152" width="300" height="40" rx="4" class="n-op"/>
+        <text x="423" y="168" class="sm2" text-anchor="middle">main_proj + main_norm → 3 个 block 的 wkv</text>
+        <text x="423" y="184" class="sm" text-anchor="middle">写进 3 个草稿窗口（各 ≤128 行）</text>
+        <text x="14" y="246" class="hd">草稿器</text>
+        <rect x="80" y="236" width="40" height="26" rx="3" class="n-new"/>
+        <text x="100.0" y="254" class="sm2" text-anchor="middle">s3</text>
+        <rect x="124" y="236" width="40" height="26" rx="3" class="n-op"/>
+        <text x="144.0" y="254" class="sm2" text-anchor="middle">N</text>
+        <rect x="168" y="236" width="40" height="26" rx="3" class="n-op"/>
+        <text x="188.0" y="254" class="sm2" text-anchor="middle">N</text>
+        <rect x="212" y="236" width="40" height="26" rx="3" class="n-op"/>
+        <text x="232.0" y="254" class="sm2" text-anchor="middle">N</text>
+        <rect x="256" y="236" width="40" height="26" rx="3" class="n-op"/>
+        <text x="276.0" y="254" class="sm2" text-anchor="middle">N</text>
+        <text x="80" y="280" class="sm">N = noise 占位 token</text>
+        <path d="M304,249 H316" class="ln" marker-end="url(#dA)"/>
+        <rect x="320" y="226" width="162" height="46" rx="4" class="n-op"/>
+        <text x="401" y="244" class="sm2" text-anchor="middle">3 个 DSpark block</text>
+        <text x="401" y="260" class="sm" text-anchor="middle">窗口 + 块内双向 attention</text>
+        <path d="M423,192 V224" class="ln dash" marker-end="url(#dA)"/>
+        <text x="431" y="218" class="sm">读草稿窗口</text>
+        <path d="M482,249 H504" class="ln" marker-end="url(#dA)"/>
+        <text x="510" y="220" class="sm">5 个位置的基础 logits，再由 Markov 头逐个采样</text>
+        <rect x="510" y="236" width="40" height="26" rx="3" class="n-kv"/>
+        <text x="530" y="254" class="sm2" text-anchor="middle">d'1</text>
+        <rect x="570" y="236" width="40" height="26" rx="3" class="n-kv"/>
+        <text x="590" y="254" class="sm2" text-anchor="middle">d'2</text>
+        <path d="M552,249 H566" class="ln" marker-end="url(#dA)"/>
+        <rect x="630" y="236" width="40" height="26" rx="3" class="n-kv"/>
+        <text x="650" y="254" class="sm2" text-anchor="middle">d'3</text>
+        <path d="M612,249 H626" class="ln" marker-end="url(#dA)"/>
+        <rect x="690" y="236" width="40" height="26" rx="3" class="n-kv"/>
+        <text x="710" y="254" class="sm2" text-anchor="middle">d'4</text>
+        <path d="M672,249 H686" class="ln" marker-end="url(#dA)"/>
+        <rect x="750" y="236" width="40" height="26" rx="3" class="n-kv"/>
+        <text x="770" y="254" class="sm2" text-anchor="middle">d'5</text>
+        <path d="M732,249 H746" class="ln" marker-end="url(#dA)"/>
+        <text x="510" y="280" class="sm">第 i 个位置的 logits 加上由 d'(i−1) 算出的 bias 再采样</text>
+        <path d="M770,262 V312 H64 V37 H76" class="ln dash" marker-end="url(#dA)"/>
+        <text x="100" y="328" class="sm2">第 n+1 步：主模型验证 [s3, d'1 … d'5]</text>
+      </svg>
+    </div>
+    <figcaption>一步 decode。上：主模型验证上一步的 5 个草稿，本例接受 2 个，加上主模型自己采样的 s3，产出 3 个 token。下：草稿器用 [s3, 4 个 noise] 一次前向猜出下一批 5 个草稿。虚线是跨模块的数据。</figcaption>
+  </figure>
+
+  <h4>草稿器读什么</h4>
   <ul>
-    <li><b>结构</b>：3 个 Transformer block（config 中 <code>n_mtp_layers = 3</code>，权重在 <code>mtp.*</code> 下），滑窗 128，MoE 为 128 个专家、激活 3 个。</li>
-    <li><b>输入</b>：取主模型 L37、L38、L39 输入处的隐状态（对 4 份 mHC 流取平均）拼起来，经 <code>main_proj / main_norm</code> 投影进 drafter 的窗口 KV。</li>
-    <li><b>半自回归草拟</b>：草稿块由已知 token 后接 noise 占位 token（<code>dspark_noise_token_id = 128799</code>）组成，块内不加因果掩码，一次前向并行算出 5 个位置的基础 logits；Markov 头（rank 256）建模相邻草稿之间的依赖。</li>
-    <li><b>按置信度调度验证</b>：置信度头预测每个位置被接受的条件概率，由此估计“前 k 个草稿全部存活”的概率；调度器再结合实测的引擎吞吐曲线，在当前负载下为每个请求选择验证长度，目标是整个系统的期望吞吐最大。</li>
-    <li><b>训练</b>：V3 的 MTP 是和主干一起预训练的。DSpark 在预训练之后单独训练，主干冻结；post-training 期间继续训练，但梯度不回传到主干。这样它能跟上不断变化的策略，同时加速线上服务和 RL / OPD 的 rollout。</li>
+    <li>主模型每次 forward 时，取 L37、L38、L39 这三层<b>输入处</b>的隐状态，对 4 路 mHC 取平均，拼成 15360 维，经 <code>main_proj</code>（15360 → 5120）和 <code>main_norm</code>。</li>
+    <li>3 个草稿 block 各用自己的 <code>wkv</code> 把它变成 KV，写进各自的 SWA 窗口（最多 128 行）。所以草稿 block 的“历史”完全来自主模型的隐状态，不是草稿 token 自己。</li>
+    <li>草稿 block 没有压缩 KV、没有 indexer（compress_ratio = 0），MoE 是 128 个专家选 3（主模型是 384 选 6）。embedding 和 LM head 与主模型共用。</li>
   </ul>
-  <p>论文正文没有给出接受长度和加速比，vLLM 博客也没有提到 DSpark 的数字。</p>
+
+  <h4>一次前向猜 5 个</h4>
+  <ul>
+    <li>输入块是 [s, N, N, N, N]：s 是主模型刚采样出的 token，N 是 noise 占位 token（id 128799）。5 个位置的输出依次预测 s 之后的第 1–5 个 token。</li>
+    <li>块内 attention：每个位置的 query 读草稿窗口（≤128 行）加上块内全部 5 个位置，<b>块内不加因果掩码</b>，是双向的。</li>
+    <li>3 个 block 串联，最后过 norm 和共用的 LM head，得到 5 个位置的“基础 logits”。</li>
+  </ul>
+
+  <h4>Markov 头：补上相邻 token 的依赖</h4>
+  <p>并行猜的问题是：第 i 个位置不知道第 i−1 个位置最后选了哪个 token（它只看到 noise）。Markov 头按顺序处理 5 个位置，每一步用上一步刚选出的 token 给当前位置的 logits 加一个 bias，相当于在基础 logits 上叠了一个 rank 256 的 bigram 模型：</p>
+<pre>out[0] = s
+for i in 0..4:
+    e        = E_markov[out[i]]                  <span class="c"># [256]，上一个 token 的 embedding</span>
+    logits_i += e · W_headᵀ                      <span class="c"># [129280]，rank 256 的 bias</span>
+    out[i+1] = sample(logits_i)                  <span class="c"># 第 i+1 个草稿</span>
+confidence_i = w · [h_i ; e_i]                   <span class="c"># 每个位置被接受的概率（logit）</span></pre>
+  <p>这一步是串行的，但每步只是 256 维 embedding 乘 [256 × 129280] 的小矩阵，不过草稿 block。</p>
+
+  <h4>验证：主模型一次算 6 行</h4>
+  <ul>
+    <li>下一步，主模型对每个请求算 6 行：[s, d'1 … d'5]，在每行采样，从 d'1 开始和草稿比对，遇到第一个不一致就停。接受的 k 个草稿加上主模型在第 k+1 行采样的 token，一步产出 1–6 个 token。</li>
+    <li><b>按置信度选验证长度</b>（论文）：置信度头给出每个位置的接受概率，由此估计“前 k 个全部被接受”的概率；调度器结合实测的引擎吞吐曲线，在当前负载下为每个请求选验证长度，目标是整个系统的期望吞吐最大。</li>
+    <li><b>ATOM 的现状</b>：默认固定验证 5 个。动态验证需要为部署单独标定的 profile（置信度温度 + 吞吐表），置信度头在固定宽度时算了但不用。随机采样时的验证是“按主模型分布采样再比对”，输出分布和不投机时一致，但接受率不保证达到概率比 rejection sampling 的水平。</li>
+    <li><b>状态</b>：6 行的 KV 和 SWA 窗口会先写进去。ATOM 的 SWA 环开 133 行（128 + 5 行余量），保证不管接受几个，前面的窗口都还在；压缩器尾部和 Engram 游标按“接受到第几行”提交。</li>
+  </ul>
+
+  <h4>训练与数字</h4>
+  <ul>
+    <li><b>训练</b>：V3 的 MTP 和主干一起预训练。DSpark 在预训练之后单独训练，主干冻结；post-training 期间继续训练，但梯度不回传到主干。这样它能跟上不断变化的策略，同时加速线上服务和 RL / OPD 的 rollout。</li>
+    <li><b>数字</b>：论文正文没有给出接受长度和加速比，vLLM 博客也没有。ATOM 的 recipe 记录了 TP4 + DSpark 的 GSM8K 为 0.926，“在这些 prompt 上接受率约 50%”；AgentX 基准用的是固定接受长度 3.51。ATOM 文档写明：和不投机相比，质量是否一致、吞吐有没有普遍提升，都还没有确认。</li>
+  </ul>
 </section>
 
 <section class="sec" id="d-moe">
