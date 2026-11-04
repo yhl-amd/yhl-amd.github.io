@@ -317,7 +317,7 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
     </ol>
     <div class="part">第二部分 · 重点</div>
     <ol>
-      <li><a href="#k-ced"><span>2.1</span>CED：前半读、后半写</a></li>
+      <li><a href="#k-ced"><span>2.1</span>CED：prompt 只过前 20 层</a></li>
       <li><a href="#k-share"><span>2.2</span>CSA2：一份 KV 多层共用</a></li>
       <li><a href="#k-comp"><span>2.3</span>压缩变简单了</a></li>
       <li><a href="#k-hier"><span>2.4</span>分层 indexer</a></li>
@@ -370,7 +370,7 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
   <h3>V4.1-Flash 是什么</h3>
   <ul>
     <li><b>原生多模态 MoE</b>：输入图和文本，输出文本。主干 552B 参数，另有 196B 的 Engram 查表参数，激活参数 prefill 时 8B、decode 时 16B。</li>
-    <li><b>40 层</b>：前 20 层叫因果编码器，后 20 层叫解码器（CED）。它仍是 decoder-only 那样的因果模型，“编码器”只是前半部分层的名字，不是 BERT 那种双向编码器（见 2.1）。hidden size 5120，上下文 1M。</li>
+    <li><b>40 层</b>：前 20 层叫因果编码器，后 20 层叫解码器（CED，见 2.1）。hidden size 5120，上下文 1M。</li>
     <li><b>从头训练</b>：45T token 的图文语料，稀疏注意力在 64K 长度上训练，34T token 时扩到 1M。后训练仍是 SFT → RL → OPD。</li>
     <li><b>推理强度</b>可以设成 1–100 之间的任意整数，取代 V4 的固定三档。</li>
     <li>MIT 协议开源。API 名称为 <code>deepseek-flash</code>，V4-Flash 已下线并临时转发到 V4.1-Flash。</li>
@@ -432,7 +432,7 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
   <div class="tbl"><table>
     <thead><tr><th>要省的东西</th><th>主要手段</th><th>效果</th></tr></thead>
     <tbody>
-      <tr><td>prefill 算力</td><td>CED：prompt 的大部分 token 只跑前 21 层</td><td>prefill 激活 8B，约为 decode 的一半</td></tr>
+      <tr><td>prefill 算力</td><td>CED：prompt 的大部分 token 只跑前 20 层</td><td>prefill 激活 8B，约为 decode 的一半</td></tr>
       <tr><td>HBM 里的全局 KV</td><td>CSA2 跨层共享（40 层里只有 4 层存 KV）+ FP4</td><td>890 B/token，约 1/4</td></tr>
       <tr><td>SSD 上的持久 KV</td><td>SWA 不落盘，靠 Bounded Replay 近似重建</td><td>约 1/8</td></tr>
     </tbody>
@@ -470,24 +470,134 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
 
 <section class="sec" id="k-ced">
   <div class="sec-no">2.1</div>
-  <h3>CED：前 20 层负责读，后 20 层负责写</h3>
-  <p class="gist">先说结论：<b>V4.1 本质上还是 decoder-only 那样的因果模型</b>，和 GPT、V3、V4 一样一个一个往外生成 token。这里的“编码器 / 解码器”，只是把 40 层从中间切成两半后给两半起的名字，和 BERT、翻译模型里的编码器不是一回事。</p>
-
-  <h4>和你熟悉的编码器-解码器有什么不同</h4>
-  <div class="tbl"><table>
-    <thead><tr><th></th><th>翻译模型（原版 Transformer、T5）</th><th>BERT</th><th>V4.1 的 CED</th></tr></thead>
-    <tbody>
-      <tr><td>编码器能看哪里</td><td>双向：每个词能看整句</td><td>双向</td><td class="new">因果：每个 token 只能看它前面的 token</td></tr>
-      <tr><td>序列</td><td>两条：原文进编码器，译文进解码器</td><td>一条，只做理解，不生成</td><td class="new">一条：prompt 和生成的 token 首尾相接</td></tr>
-      <tr><td>生成的 token 过不过编码器</td><td>不过</td><td>—</td><td class="new">过：decode 时每个新 token 都走完全部 40 层</td></tr>
-      <tr><td>解码器怎么看输入</td><td>cross-attention 看编码器的输出</td><td>—</td><td class="new">后 20 层回头看历史时，用的全局 KV 统一由第 20 层根据前 20 层的输出生成</td></tr>
-      <tr><td>层栈</td><td>两个独立的层栈</td><td>一个层栈</td><td class="new">一个 40 层的层栈，从中间切开</td></tr>
-    </tbody>
-  </table></div>
+  <h3>CED：prompt 只需走完前 20 层</h3>
+  <p class="gist">一句话：<b>后 20 层（解码器）回头看历史时用的全局 KV，统一由前 20 层（编码器）的输出投影得到</b>。所以 prompt 的绝大部分 token 只要算完前 20 层，解码器只补算最后 128 个。模型仍是一条序列、一个 40 层的因果模型，decode 时每个新 token 照样走完 40 层；“编码器 / 解码器”只是前 20 层和后 20 层的名字。</p>
 
   <h4>切成两半，只改了一件事</h4>
-  <p>每一层回头看历史 token 时，看的是这些 token 在<b>本层</b>留下的笔记（KV）。在普通的 decoder-only 模型里，token t 在第 l 层的笔记由它在第 l 层的隐状态算出来。所以要让 40 层都有笔记，prompt 的每个 token 都必须走完 40 层。</p>
-  <p>V4.1 改的就是这一点：<b>后 20 层用的全局笔记，不再由每层自己写，而是统一由第 20 层根据前 20 层的输出写一份</b>，后面各层共用。（这和 2.2 节讲的“组长写笔记、组员共用”是同一个思路：第 20 层就是整个解码器的组长。）</p>
+  <p>每一层回头看历史 token 时，读的是这些 token 在<b>本层</b>留下的笔记（KV）。在普通的 decoder-only 模型里，token t 在第 l 层的笔记由它在第 l 层的隐状态算出来，所以要让 40 层都有笔记，prompt 的每个 token 都必须走完 40 层。</p>
+  <p>V4.1 的每一层要读两种笔记：覆盖全部历史的<b>全局 KV</b>，和只覆盖最近 128 个 token 的 <b>SWA KV</b>。CED 只改了前一种：<b>解码器的全局笔记不再由各层自己写，而是由 L20 根据 H<sub>20</sub>（编码器 L0–19 的输出）给每个 token 写一份 KV④，L20–39 共用</b>。SWA KV 仍然每层用自己的隐状态算。（这和 2.2 节“组长写笔记、组员共用”是同一个思路：L20 就是整个解码器的组长。）</p>
+  <p>下图任取解码器里的一层 L30，看 decode 时新 token 在这一层要读哪些 KV，以及 prefill 因此必须提前算好哪些格子：</p>
+
+  <figure>
+    <div class="svgwrap">
+      <svg viewBox="0 0 960 420" role="img" aria-label="对比 decode 时新 token 在第 30 层要读哪些 KV。左：普通 decoder-only 模型每层只读本层的 KV，L30 要读每个 token 在 L30 的 KV，所以每个 prompt token 都要算满 40 层。右：V4.1 的 CED 中，解码器层读两样：本层的 SWA KV，只覆盖最近 128 个 token；以及所有解码器层共用的全局 KV④，它由 L20 从编码器输出 H20 投影，每个 token 一份。因此前 N−128 个 prompt token 在解码器里的格子没有任何 query 会读，prefill 时跳过；编码器对全部 token 计算，解码器只为最后 128 个 token 计算 SWA KV。">
+        <text x="12" y="22" class="ttl">普通 decoder-only（V4 也是）</text>
+        <text x="12" y="42" class="sm">每层只读本层的 KV</text>
+        <rect x="66" y="64" width="22" height="268" rx="2" class="q-c"/>
+        <rect x="94" y="64" width="22" height="268" rx="2" class="q-c"/>
+        <rect x="122" y="64" width="22" height="268" rx="2" class="q-c"/>
+        <rect x="150" y="64" width="22" height="268" rx="2" class="q-c"/>
+        <rect x="178" y="64" width="22" height="268" rx="2" class="q-c"/>
+        <rect x="206" y="64" width="22" height="268" rx="2" class="q-c"/>
+        <rect x="246" y="64" width="22" height="268" rx="2" class="q-c"/>
+        <rect x="274" y="64" width="22" height="268" rx="2" class="q-c"/>
+        <rect x="302" y="64" width="22" height="268" rx="2" class="q-c"/>
+        <rect x="342" y="64" width="22" height="268" rx="2" class="q-c"/>
+        <rect x="342" y="114" width="22" height="10" rx="2" class="" style="fill:var(--rope);stroke:var(--rope)"/>
+        <line class="ln" x1="70" y1="119" x2="342" y2="119"/>
+        <circle cx="77" cy="119" r="3" style="fill:var(--surface);stroke:currentColor;stroke-width:1.3"/>
+        <circle cx="105" cy="119" r="3" style="fill:var(--surface);stroke:currentColor;stroke-width:1.3"/>
+        <circle cx="133" cy="119" r="3" style="fill:var(--surface);stroke:currentColor;stroke-width:1.3"/>
+        <circle cx="161" cy="119" r="3" style="fill:var(--surface);stroke:currentColor;stroke-width:1.3"/>
+        <circle cx="189" cy="119" r="3" style="fill:var(--surface);stroke:currentColor;stroke-width:1.3"/>
+        <circle cx="217" cy="119" r="3" style="fill:var(--surface);stroke:currentColor;stroke-width:1.3"/>
+        <circle cx="257" cy="119" r="3" style="fill:var(--surface);stroke:currentColor;stroke-width:1.3"/>
+        <circle cx="285" cy="119" r="3" style="fill:var(--surface);stroke:currentColor;stroke-width:1.3"/>
+        <circle cx="313" cy="119" r="3" style="fill:var(--surface);stroke:currentColor;stroke-width:1.3"/>
+        <text x="58" y="72" class="sm" text-anchor="end">L39</text>
+        <text x="58" y="123" class="sm" text-anchor="end" style="fill:var(--rope)">L30</text>
+        <text x="58" y="332" class="sm" text-anchor="end">L0</text>
+        <line class="ln" x1="66" y1="346" x2="228" y2="346"/>
+        <text x="147" y="362" class="sm" text-anchor="middle">前 N−128 个 prompt token</text>
+        <line class="ln" x1="246" y1="346" x2="324" y2="346"/>
+        <text x="285" y="362" class="sm" text-anchor="middle">最后 128 个</text>
+        <line class="ln" x1="342" y1="346" x2="364" y2="346"/>
+        <text x="353" y="362" class="sm" text-anchor="middle">新 token</text>
+        <text x="12" y="388" class="sm2">L30 读每个 token 在 L30 的 KV，</text>
+        <text x="12" y="404" class="sm2">所以 prompt 的每个 token 都要算满 40 层。</text>
+        <line class="grid" x1="470" y1="8" x2="470" y2="410"/>
+        <text x="492" y="22" class="ttl">V4.1 的 CED</text>
+        <text x="492" y="42" class="sm">解码器层读两样：① 本层的 SWA KV　② 共用的 KV④</text>
+        <rect x="546" y="216" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="546" y="192" width="22" height="12" rx="2" class="f-full"/>
+        <rect x="574" y="216" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="574" y="192" width="22" height="12" rx="2" class="f-full"/>
+        <rect x="602" y="216" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="602" y="192" width="22" height="12" rx="2" class="f-full"/>
+        <rect x="630" y="216" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="630" y="192" width="22" height="12" rx="2" class="f-full"/>
+        <rect x="658" y="216" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="658" y="192" width="22" height="12" rx="2" class="f-full"/>
+        <rect x="686" y="216" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="686" y="192" width="22" height="12" rx="2" class="f-full"/>
+        <rect x="726" y="216" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="726" y="192" width="22" height="12" rx="2" class="f-full"/>
+        <rect x="754" y="216" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="754" y="192" width="22" height="12" rx="2" class="f-full"/>
+        <rect x="782" y="216" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="782" y="192" width="22" height="12" rx="2" class="f-full"/>
+        <rect x="822" y="216" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="822" y="192" width="22" height="12" rx="2" class="f-full"/>
+        <rect x="546" y="64" width="22" height="116" rx="2" class="q-s"/>
+        <rect x="574" y="64" width="22" height="116" rx="2" class="q-s"/>
+        <rect x="602" y="64" width="22" height="116" rx="2" class="q-s"/>
+        <rect x="630" y="64" width="22" height="116" rx="2" class="q-s"/>
+        <rect x="658" y="64" width="22" height="116" rx="2" class="q-s"/>
+        <rect x="686" y="64" width="22" height="116" rx="2" class="q-s"/>
+        <rect x="726" y="64" width="22" height="116" rx="2" class="q-p"/>
+        <rect x="754" y="64" width="22" height="116" rx="2" class="q-p"/>
+        <rect x="782" y="64" width="22" height="116" rx="2" class="q-p"/>
+        <rect x="822" y="64" width="22" height="116" rx="2" class="q-c"/>
+        <rect x="822" y="114" width="22" height="10" rx="2" class="" style="fill:var(--rope);stroke:var(--rope)"/>
+        <rect x="563" y="102" width="128" height="40" rx="4" class="f-op"/>
+        <text x="627" y="118" class="sm2" text-anchor="middle">跳过</text>
+        <text x="627" y="134" class="sm" text-anchor="middle">没有 query 读这里</text>
+        <line x1="730" y1="119" x2="822" y2="119" style="stroke:var(--swa);stroke-width:1.5"/>
+        <circle cx="737" cy="119" r="3.5" style="fill:var(--surface);stroke:var(--swa);stroke-width:1.5"/>
+        <circle cx="765" cy="119" r="3.5" style="fill:var(--surface);stroke:var(--swa);stroke-width:1.5"/>
+        <circle cx="793" cy="119" r="3.5" style="fill:var(--surface);stroke:var(--swa);stroke-width:1.5"/>
+        <text x="813" y="111" class="sm2" text-anchor="middle" style="fill:var(--swa)">①</text>
+        <path d="M844,119 H856 V210 H557" style="fill:none;stroke:var(--csa);stroke-width:1.5"/>
+        <line x1="557" y1="210" x2="557" y2="204" style="stroke:var(--csa);stroke-width:1.5"/>
+        <line x1="585" y1="210" x2="585" y2="204" style="stroke:var(--csa);stroke-width:1.5"/>
+        <line x1="613" y1="210" x2="613" y2="204" style="stroke:var(--csa);stroke-width:1.5"/>
+        <line x1="641" y1="210" x2="641" y2="204" style="stroke:var(--csa);stroke-width:1.5"/>
+        <line x1="669" y1="210" x2="669" y2="204" style="stroke:var(--csa);stroke-width:1.5"/>
+        <line x1="697" y1="210" x2="697" y2="204" style="stroke:var(--csa);stroke-width:1.5"/>
+        <line x1="737" y1="210" x2="737" y2="204" style="stroke:var(--csa);stroke-width:1.5"/>
+        <line x1="765" y1="210" x2="765" y2="204" style="stroke:var(--csa);stroke-width:1.5"/>
+        <line x1="793" y1="210" x2="793" y2="204" style="stroke:var(--csa);stroke-width:1.5"/>
+        <line x1="833" y1="210" x2="833" y2="204" style="stroke:var(--csa);stroke-width:1.5"/>
+        <text x="862" y="168" class="sm2" style="fill:var(--csa)">②</text>
+        <text x="538" y="72" class="sm" text-anchor="end">L39</text>
+        <text x="538" y="123" class="sm" text-anchor="end" style="fill:var(--rope)">L30</text>
+        <text x="538" y="180" class="sm" text-anchor="end">L20</text>
+        <text x="538" y="202" class="sm2" text-anchor="end" style="fill:var(--csa)">KV④</text>
+        <text x="538" y="226" class="sm" text-anchor="end">L19</text>
+        <text x="538" y="332" class="sm" text-anchor="end">L0</text>
+        <text x="500" y="122" class="hd" text-anchor="middle" transform="rotate(-90 500 122)">解码器</text>
+        <text x="500" y="274" class="hd" text-anchor="middle" transform="rotate(-90 500 274)">编码器</text>
+        <line class="ln" x1="546" y1="346" x2="708" y2="346"/>
+        <text x="627" y="362" class="sm" text-anchor="middle">前 N−128 个 prompt token</text>
+        <line class="ln" x1="726" y1="346" x2="804" y2="346"/>
+        <text x="765" y="362" class="sm" text-anchor="middle">最后 128 个</text>
+        <line class="ln" x1="822" y1="346" x2="844" y2="346"/>
+        <text x="833" y="362" class="sm" text-anchor="middle">新 token</text>
+        <text x="492" y="388" class="sm2">① SWA KV：只读最近 128 个 token 在 L30 的 KV → 解码器只补算这 128 个</text>
+        <text x="492" y="404" class="sm2">② 全局 KV：读全部 token 的 KV④，由 L20 从 H₂₀ 投影 → 编码器算完就有</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span style="--sw:var(--csa-soft);--sb:var(--csa)">要计算</span>
+      <span style="--sw:var(--swa)">只为 SWA KV 而算</span>
+      <span style="--sw:transparent;--sb:var(--muted)">跳过</span>
+      <span style="--sw:var(--csa)">KV④：解码器共用的全局 KV</span>
+      <span style="--sw:var(--rope)">新 token 在 L30 的 query</span>
+    </div>
+    <figcaption>每一列是一个 token，从下往上是它经过的层，涂色的格子要计算。左：L30 读的是每个 token 在 L30 的结果，所以每一列都得算到顶。右：L30 的全局 KV 读 KV④，它只依赖编码器的输出；SWA 只看最近 128 个 token。前面那些 token 在解码器里的格子没有任何 query 会读，prefill 时直接跳过。解码器的其他层同理。最后 128 个 token 画成 3 列，不按比例。</figcaption>
+  </figure>
+
+  <p>严格来说，最后 128 个 token 在 L30 的 SWA KV 依赖它们在 L29 的结果，而后者又依赖更早的 token，精确计算要往前追 20 × 128 = 2560 个 token。V4.1 只补算最后 128 个，并把窗口截断在这里（Decoder SWA Bounded Replay，见 3.2）。</p>
 
   <h4>编码器 m=2、解码器 m=1，结构不一样，不用重算吗？</h4>
   <p>需要算，但不是“重算”：编码器和解码器用的是<b>两份不同的 KV</b>，各算各的。解码器的 m=1 KV 不是从编码器的 m=2 KV 转换来的。</p>
@@ -505,69 +615,19 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
   <p><b>KV④ 很便宜：每个 token 只做一次投影</b>，不需要 attention，也不需要 MoE。L20 的压缩器在 m=1 时就是：</p>
 <pre>if ratio == 1:
     return self.norm(self.wkv(x))   <span class="c"># 5120 → 512，再 RMSNorm；之后加 RoPE、量化成 FP4</span></pre>
-  <p>另外再投影一次得到 indexer K（512 → 128）。所以 prompt 里每个 token 的成本是：编码器 20 层整层计算 + KV④ 一次投影；解码器后 19 层跳过（最后 128 个 token 除外）。论文的说法也是这个意思：只算前一半层，就能以很小的代价拿到上半部分的全局 KV。</p>
-  <p>实际部署中，vLLM 让 L20 整层对所有 token 都跑一遍，CUDA graph 把 0–20 层放在一起捕获。这比只做一次投影多一些，但也只多了 1 层。</p>
+  <p>另外再投影一次得到 indexer K（512 → 128）。所以 prompt 里每个 token 的成本是：编码器 20 层整层计算 + KV④ 一次投影；解码器 20 层（包括 L20 的 attention 和 MoE）只算最后 128 个 token。论文的说法也是这个意思：只算前一半层，就能以很小的代价拿到上半部分的全局 KV。</p>
+  <p>vLLM 和 ATOM 现在都这样实现：L20 只给全部 token 写 KV④，L20 的 attention、MoE 和 L21–39 一样只跑最后 128 个。vLLM 是在 10/09 的 #59894 里改成这样的，之前 L20 整层要跑全部 token。</p>
 
-  <p>画成图就是这样：第 20 层用编码器的输出给全部 prompt token 写好全局 KV，后 19 层只处理最后 128 个 prompt token 和新生成的 token。</p>
-
-  <figure>
-    <div class="svgwrap">
-      <svg viewBox="0 0 800 330" role="img" aria-label="横轴是 token，纵轴是层。编码器 0 到 19 层和第 20 层处理全部 prompt token；解码器 21 到 39 层只处理 prompt 最后 128 个 token 和新生成的 token，其余区域跳过。第 20 层生成的全局 KV 供解码器各层使用。">
-        <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
-        <!-- encoder 0-19 : y 160..280 -->
-        <rect class="f-comp" x="110" y="160" width="490" height="120"/>
-        <text x="355" y="216" text-anchor="middle">编码器 0–19 层</text>
-        <text class="sm" x="355" y="234" text-anchor="middle">处理全部 prompt token</text>
-        <!-- layer 20 : y 152..160 -->
-        <rect class="f-full" x="110" y="152" width="490" height="8"/>
-        <!-- decoder skipped : y 38..152 -->
-        <rect class="f-skip" x="110" y="38" width="458" height="110"/>
-        <text x="339" y="90" text-anchor="middle" style="fill:var(--muted)">跳过</text>
-        <text class="sm" x="339" y="108" text-anchor="middle">解码器不处理 prompt 的前 N − 128 个 token</text>
-        <!-- replay sliver -->
-        <rect class="f-swa" x="570" y="38" width="30" height="114"/>
-        <!-- generated -->
-        <rect class="f-comp" x="604" y="38" width="86" height="242"/>
-        <rect class="f-full" x="604" y="152" width="86" height="8"/>
-        <text x="647" y="216" text-anchor="middle">decode</text>
-        <text class="sm" x="647" y="234" text-anchor="middle">全部 40 层</text>
-        <!-- KV arrow -->
-        <path class="ln" d="M520,152 C520,120 640,125 640,92" marker-end="url(#a1)"/>
-        <text class="sm" x="514" y="132" text-anchor="end">全局 KV</text>
-        <!-- left labels -->
-        <text class="sm" x="100" y="44" text-anchor="end">39</text>
-        <text class="sm" x="100" y="148" text-anchor="end">21</text>
-        <text class="sm" x="100" y="160" text-anchor="end" style="fill:var(--csa)">20</text>
-        <text class="sm" x="100" y="278" text-anchor="end">0</text>
-        <text class="hd" x="30" y="100" text-anchor="middle">解码器</text>
-        <text class="hd" x="30" y="222" text-anchor="middle">编码器</text>
-        <!-- right labels -->
-        <text class="sm" x="700" y="159" style="fill:var(--csa)">← 第 20 层生成</text>
-        <text class="sm" x="714" y="173" style="fill:var(--csa)">全局 KV（m=1）</text>
-        <text class="sm" x="700" y="64" style="fill:var(--swa)">← 最后 128 个</text>
-        <text class="sm" x="714" y="78" style="fill:var(--swa)">prompt token</text>
-        <text class="sm" x="714" y="92" style="fill:var(--swa)">补算 SWA KV</text>
-        <!-- axis -->
-        <line class="ln" x1="110" y1="296" x2="690" y2="296"/>
-        <text class="sm" x="110" y="314">prompt token 0</text>
-        <text class="sm" x="566" y="314" text-anchor="end">N − 128</text>
-        <text class="sm" x="602" y="314" text-anchor="end">N</text>
-        <text class="sm" x="647" y="314" text-anchor="middle">生成</text>
-      </svg>
-    </div>
-    <figcaption>横轴是 token，纵轴是层，涂色的格子才需要计算。为了能看清，最后 128 个 token 的那条画宽了，不按比例。</figcaption>
-  </figure>
-
-  <p><b>例子</b>：一个 100K token 的 prompt，用“层数 × token 数”粗略衡量 prefill 计算量：</p>
+  <p><b>例子</b>：用“层数 × token 数”粗略衡量 prefill 计算量：</p>
   <div class="tbl"><table>
-    <thead><tr><th>prompt 长度</th><th class="n">不用 CED（40 层 × N）</th><th class="n">CED（21 层 × N + 19 层 × 128）</th><th class="n">比例</th></tr></thead>
+    <thead><tr><th>prompt 长度</th><th class="n">不用 CED（40 层 × N）</th><th class="n">CED（20 层 × N + 20 层 × 128）</th><th class="n">比例</th></tr></thead>
     <tbody>
-      <tr><td>1K</td><td class="n">40,960</td><td class="n">23,936</td><td class="n">58%</td></tr>
-      <tr><td>8K</td><td class="n">327,680</td><td class="n">174,464</td><td class="n">53%</td></tr>
-      <tr class="hl"><td>100K</td><td class="n">4,000,000</td><td class="n">2,102,432</td><td class="n">53%</td></tr>
+      <tr><td>1K</td><td class="n">40,960</td><td class="n">23,040</td><td class="n">56%</td></tr>
+      <tr><td>8K</td><td class="n">327,680</td><td class="n">166,400</td><td class="n">51%</td></tr>
+      <tr class="hl"><td>100K</td><td class="n">4,000,000</td><td class="n">2,002,560</td><td class="n">50%</td></tr>
     </tbody>
   </table></div>
-  <p>这里第 20 层也处理全部 token，因为全局 KV 要由它来生成（vLLM 的实现正是这样）。decode 阶段每个新 token 仍然走完全部 40 层，所以是“prefill 8B、decode 16B”。</p>
+  <p>表里没算 KV④ 的投影：每个 token 一次 5120 → 512 的矩阵乘，粗算不到一层计算量的 1%。decode 阶段每个新 token 仍然走完全部 40 层，所以是“prefill 8B、decode 16B”。</p>
 </section>
 
 <section class="sec" id="k-share">
@@ -842,22 +902,23 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
   <p><b>和 YOCO 的区别</b>：论文说 YOCO 让上半部分的层直接共享下半部分生成的 KV cache。CED 在此基础上做了两点改进：一是解码器的全局 KV 用逐层的投影权重 W<sub>l</sub> 从 H<sub>20</sub> 算出（在 CSA2 里实际上只由 L20 这个 Full 层算一份，其余层共享）；二是 SWA 保持逐层计算，论文的说法是“增加了局部 KV 生成的计算深度”。</p>
 
   <figure>
-    <div class="svgwrap"><svg id="ced4" viewBox="0 0 860 440" role="img" aria-label="四种场景的层乘 token 示意。(a) 冷启动：编码器和 L20 计算全部 token，解码器只为 SWA 计算最后 128 个。(b) 前缀命中且 SWA 命中：前缀读缓存，编码器和 L20 只算新增后缀，解码器只算 prompt 最后 128 个。(c) 前缀命中但 SWA 过期：在 (b) 的基础上，编码器和 L20 额外重放前缀末尾 128 个 token，只重建 SWA KV。(d) decode：只有新 token 走完 40 层，其余读缓存。"></svg></div>
+    <div class="svgwrap"><svg id="ced4" viewBox="0 0 860 440" role="img" aria-label="四种场景的层乘 token 示意。(a) 冷启动：编码器和 KV④ 投影覆盖全部 token，解码器 L20–39 只为 SWA 计算最后 128 个。(b) 前缀命中且 SWA 命中：前缀读缓存，编码器和 KV④ 只算新增后缀，解码器只算 prompt 最后 128 个。(c) 前缀命中但 SWA 过期：在 (b) 的基础上，编码器额外重放前缀末尾 128 个 token，只重建 SWA KV，这些 token 的 KV④ 仍从缓存读。(d) decode：只有新 token 走完 40 层，其余读缓存。"></svg></div>
     <div class="legend">
       <span style="--sw:var(--csa-soft);--sb:var(--csa)">完整计算（全局 KV + SWA KV）</span>
+      <span style="--sw:var(--csa)">写 KV④</span>
       <span style="--sw:var(--sunk);--sb:var(--rule)">从缓存读回</span>
       <span style="--sw:var(--swa)">只为 SWA 重算</span>
       <span style="--sw:transparent;--sb:var(--muted)">跳过</span>
     </div>
-    <figcaption>横轴是 token，纵轴是层：上段 L21–39（解码器），中间细条 L20，下段 L0–19（编码器）。为了能看清，128 个 token 的窄条画宽了，不按比例。(b)(c) 假设新增后缀不少于 128 个 token。</figcaption>
+    <figcaption>配色同 2.1 的图：横轴是 token，纵轴是层。上段 L20–39（解码器），中间细条是 KV④（L20 用编码器输出 H<sub>20</sub> 投影的全局 KV），下段 L0–19（编码器）。为了能看清，128 个 token 的窄条画宽了，不按比例。(b)(c) 假设新增后缀不少于 128 个 token。</figcaption>
   </figure>
 
   <div class="tbl"><table>
-    <thead><tr><th>场景</th><th>编码器 + L20</th><th>解码器 L21–39</th><th>说明</th></tr></thead>
+    <thead><tr><th>场景</th><th>编码器 + KV④ 投影</th><th>解码器 L20–39</th><th>说明</th></tr></thead>
     <tbody>
       <tr><td>(a) 冷启动</td><td>全部 N 个 token</td><td>只算 prompt 最后 128 个</td><td>prefill 计算量约减半</td></tr>
       <tr><td>(b) 前缀命中，SWA 命中</td><td>只算新增后缀</td><td>同上</td><td>几分钟内的下一轮对话</td></tr>
-      <tr><td>(c) 前缀命中，SWA 过期</td><td>新增后缀 + 前缀末尾 128 个（只重建 SWA）</td><td>同上</td><td>Encoder Bounded Replay</td></tr>
+      <tr><td>(c) 前缀命中，SWA 过期</td><td>新增后缀 + 前缀末尾 128 个过编码器（只重建 SWA，KV④ 仍读缓存）</td><td>同上</td><td>Encoder Bounded Replay</td></tr>
       <tr><td>(d) decode</td><td>新 token</td><td>新 token</td><td>每个新 token 走完 40 层</td></tr>
     </tbody>
   </table></div>
@@ -867,7 +928,7 @@ table.tiers td small{display:block;color:var(--muted);font-size:12px;font-weight
   <div class="note">
     <span class="lbl">注意</span>近似的一个副作用
     <p>场景 (c) 中，新增后缀的全局 KV 和 SWA KV 依赖于“缓存从哪个位置命中”：同一段文字在不同命中位置下，算出来的 KV 不完全相同。论文说这几乎不影响回答质量。</p>
-    <p>官方参考代码 <code>model.py</code> 不做跳层，每个 <code>Block</code> 处理每个 token。跳层在生产推理系统里实现，vLLM 的做法是把 CUDA graph 拆成两段（层 0–20 用完整 batch，层 21–39 用裁剪后的 batch），开关 <code>--[no-]swa-bounded-replay</code> 默认打开，带 CUDA graph 时 prefill 耗时下降 30–40%。</p>
+    <p>官方参考代码 <code>model.py</code> 不做跳层，每个 <code>Block</code> 处理每个 token。跳层在生产推理系统里实现，vLLM 的做法是把一个 step 拆成两段：编码器和 L20 的 KV 写入用完整 batch，L20 其余部分和 L21–39 用只含最后 128 行的裁剪 batch（10/09 的 #59894 之前是层 0–20 用完整 batch），开关 <code>--[no-]swa-bounded-replay</code> 默认打开，带 CUDA graph 时 prefill 耗时下降 30–40%。</p>
   </div>
 </section>
 
@@ -1642,7 +1703,7 @@ return x, ffn_pre                                  <span class="c"># 交给下�
     const panels = [
       ['(a) 冷启动 prefill', '没有任何缓存', [['enc', 0, W, C], ['l20', 0, W, C], ['dec', 0, W - SL, S], ['dec', W - SL, W, Pl]], 'cold'],
       ['(b) 前缀命中，SWA 也命中', '几分钟内的下一轮对话', [['enc', 0, PX, R], ['enc', PX, W, C], ['l20', 0, PX, R], ['l20', PX, W, C], ['dec', 0, W - SL, S], ['dec', W - SL, W, Pl]], 'hit'],
-      ['(c) 前缀命中，SWA 已过期', 'Encoder Bounded Replay', [['enc', 0, PX - SL, R], ['enc', PX - SL, PX, Pl], ['enc', PX, W, C], ['l20', 0, PX - SL, R], ['l20', PX - SL, PX, Pl], ['l20', PX, W, C], ['dec', 0, W - SL, S], ['dec', W - SL, W, Pl]], 'hit'],
+      ['(c) 前缀命中，SWA 已过期', 'Encoder Bounded Replay', [['enc', 0, PX - SL, R], ['enc', PX - SL, PX, Pl], ['enc', PX, W, C], ['l20', 0, PX, R], ['l20', PX, W, C], ['dec', 0, W - SL, S], ['dec', W - SL, W, Pl]], 'hit'],
       ['(d) decode 一个新 token', '每个新 token 走完 40 层', [['enc', 0, W - SL, R], ['enc', W - SL, W, C], ['l20', 0, W - SL, R], ['l20', W - SL, W, C], ['dec', 0, W - 2 * SL, S], ['dec', W - 2 * SL, W - SL, R], ['dec', W - SL, W, C]], 'dec']
     ];
     let h = '';
@@ -1650,10 +1711,10 @@ return x, ffn_pre                                  <span class="c"># 交给下�
       const ox = (k % 2) * 430, oy = Math.floor(k / 2) * 220, X0 = ox + 70;
       const band = { dec: [oy + 46, 70], l20: [oy + 118, 8], enc: [oy + 128, 70] };
       h += tx(ox + 4, oy + 18, title, 'ttl') + tx(ox + 4, oy + 34, sub, 'sm');
-      h += tx(X0 - 6, oy + 85, 'L21–39', 'sm', 'text-anchor="end"');
-      h += tx(X0 - 6, oy + 126, 'L20', 'sm', 'text-anchor="end"');
+      h += tx(X0 - 6, oy + 85, 'L20–39', 'sm', 'text-anchor="end"');
+      h += tx(X0 - 6, oy + 126, 'KV④', 'sm', 'text-anchor="end" style="fill:var(--csa)"');
       h += tx(X0 - 6, oy + 167, 'L0–19', 'sm', 'text-anchor="end"');
-      spec.forEach(([b, a, c, cls]) => { const [yy, hh] = band[b]; h += `<rect x="${X0 + a}" y="${yy}" width="${c - a}" height="${hh}" class="${cls}"/>`; });
+      spec.forEach(([b, a, c, cls]) => { const [yy, hh] = band[b]; h += `<rect x="${X0 + a}" y="${yy}" width="${c - a}" height="${hh}" class="${b === 'l20' && cls === C ? 'f-full' : cls}"/>`; });
       const ay = oy + 212;
       if (axis === 'cold') h += tx(X0 + W / 2, ay, 'prompt 的 N 个 token →', 'sm', 'text-anchor="middle"');
       if (axis === 'hit') {
