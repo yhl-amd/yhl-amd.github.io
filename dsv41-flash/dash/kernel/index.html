@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSV4.1-Flash kernel 看板（页面框架 · 示例数据）</title>
+<style>
+/* 视觉沿用 yhl-amd.github.io/dsv41-flash（x-opgraph 一节）：同一套 CSS 变量与字体栈；离线可用，不引外部字体。
+   模块配色是校验过的分类色（固定顺序，不随排名变化）：attention 蓝 / MoE 绿松 / 通信 橙 / DSpark 黄 / 收尾 品红 / 前置 紫 / 辅助 灰。 */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --sunk:#eaecf0; --ink:#18202b; --muted:#596373; --rule:#d7dbe2;
+  --hca:#a86a0c; --csa:#2f4dbf; --csa-mid:#7f93dc; --swa:#0f7a60; --sink:#86479f; --rope:#c34a1f;
+  --hca-soft:#f5e7cf; --csa-soft:#e0e6f9; --swa-soft:#d6eee6; --sink-soft:#eedff4; --rope-soft:#fae1d6;
+  --c-attn:#2a78d6; --c-moe:#1baf7a; --c-comm:#eb6834; --c-dspark:#eda100; --c-epi:#e87ba4; --c-pro:#4a3aa7; --c-misc:#898781; --c-other:#52514e;
+  --heat:#c34a1f; --grid:#e1e0d9;
+  --font-display:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --font-body:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono","SFMono-Regular",Menlo,Consolas,"Noto Sans SC","PingFang SC",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11151b; --surface:#181e27; --sunk:#0c1015; --ink:#e3e7ee; --muted:#98a2b2; --rule:#2a323d;
+    --hca:#e0a24a; --csa:#8aa0f3; --csa-mid:#4f63ae; --swa:#4cc3a0; --sink:#c78ce0; --rope:#f08c60;
+    --hca-soft:#3a2b13; --csa-soft:#1e2849; --swa-soft:#123830; --sink-soft:#33203d; --rope-soft:#3d2216;
+    --c-attn:#3987e5; --c-moe:#199e70; --c-comm:#d95926; --c-dspark:#c98500; --c-epi:#d55181; --c-pro:#9085e9; --c-misc:#898781; --c-other:#c3c2b7;
+    --heat:#f08c60; --grid:#2c2c2a; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11151b; --surface:#181e27; --sunk:#0c1015; --ink:#e3e7ee; --muted:#98a2b2; --rule:#2a323d;
+  --hca:#e0a24a; --csa:#8aa0f3; --csa-mid:#4f63ae; --swa:#4cc3a0; --sink:#c78ce0; --rope:#f08c60;
+  --hca-soft:#3a2b13; --csa-soft:#1e2849; --swa-soft:#123830; --sink-soft:#33203d; --rope-soft:#3d2216;
+  --c-attn:#3987e5; --c-moe:#199e70; --c-comm:#d95926; --c-dspark:#c98500; --c-epi:#d55181; --c-pro:#9085e9; --c-misc:#898781; --c-other:#c3c2b7;
+  --heat:#f08c60; --grid:#2c2c2a; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:14.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
+code,.mono{font-family:var(--font-mono);font-size:.88em}
+a{color:inherit}
+.wrap{max-width:100rem;margin:0 auto;padding:1.5rem 20px 5rem}
+.hero{border-bottom:1px solid var(--rule);padding-bottom:1rem}
+.eyebrow{font-size:12px;letter-spacing:.14em;color:var(--muted);font-weight:500}
+h1{font-family:var(--font-display);font-weight:900;font-size:2.1rem;line-height:1.2;margin:.3rem 0 .6rem}
+h2{font-family:var(--font-display);font-weight:900;font-size:1.35rem;margin:2.2rem 0 .3rem}
+.gist{color:var(--muted);margin:.2rem 0 .8rem;max-width:62rem}
+.lede{max-width:62rem;margin:.2rem 0}
+.widget{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:1rem 1.15rem;margin:1rem 0;position:relative}
+.ctl{position:sticky;top:0;z-index:20;background:color-mix(in oklab,var(--bg) 92%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--rule);padding:.55rem 0;margin:0 0 .5rem}
+.ctl-row{display:flex;flex-wrap:wrap;gap:.45rem .9rem;align-items:center;font-size:13px}
+.ctl-row+.ctl-row{margin-top:.35rem}
+.ctl label{color:var(--muted)}
+select,input[type=search]{font:inherit;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:.2rem .45rem}
+.segc{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.segc button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--muted);padding:.22rem .7rem;cursor:pointer}
+.segc button+button{border-left:1px solid var(--rule)}
+.segc button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.chips{display:inline-flex;flex-wrap:wrap;gap:3px}
+.chip{font:inherit;font-family:var(--font-mono);font-size:12px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:5px;padding:.1rem .45rem;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip.na{color:var(--muted);border-style:dashed;background:transparent}
+.dimlab{font-size:12px;color:var(--muted);min-width:4.2rem;display:inline-block}
+.btn{font:inherit;font-size:13px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:6px;padding:.2rem .65rem;cursor:pointer}
+.status{color:var(--muted);font-size:12.5px}
+.banner{border-left:3px solid var(--rope);background:var(--rope-soft);padding:.5rem .8rem;border-radius:0 6px 6px 0;font-size:13px;margin:.5rem 0}
+.banner.ok{border-color:var(--swa);background:var(--swa-soft)}
+.banner.mid{border-color:var(--hca);background:var(--hca-soft)}
+.banner b{font-weight:700}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:8px;overflow:hidden;margin:.6rem 0}
+.tiles div{background:var(--surface);padding:.55rem .8rem}
+.tiles b{display:block;font-family:var(--font-display);font-weight:900;font-size:1.35rem;line-height:1.2;font-variant-numeric:tabular-nums}
+.tiles span{font-size:12px;color:var(--muted)}
+.tiles i{font-style:normal;font-size:11.5px;color:var(--muted);display:block}
+.scroll{overflow-x:auto}
+/* flow diagram */
+#flow svg{display:block}
+.fn rect.box{stroke:var(--rule);stroke-width:1;rx:6}
+.fn.sel rect.box{stroke:var(--ink);stroke-width:2}
+.fn.nodata rect.box{stroke-dasharray:4 3;fill:transparent}
+.fn{cursor:pointer}
+.fn text{fill:var(--ink);font-family:var(--font-body)}
+.fn text.k{font-family:var(--font-mono)}
+.fn text.v{font-family:var(--font-mono);font-weight:600}
+.lane-lab{fill:var(--muted);font-size:11.5px;font-weight:600}
+.edge{fill:none;stroke:var(--muted);stroke-width:1.2;opacity:.7}
+.band-lab{fill:var(--muted);font-size:12px;font-weight:700}
+.legend{display:flex;flex-wrap:wrap;gap:.3rem 1rem;font-size:12px;color:var(--muted);margin:.3rem 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.heatkey{display:inline-flex;align-items:center;gap:6px}
+.heatkey span.bar{display:inline-block;width:120px;height:10px;border-radius:3px;background:linear-gradient(90deg,color-mix(in oklab,var(--heat) 6%,var(--surface)),var(--heat))}
+/* detail */
+#detail h3{margin:.1rem 0 .3rem;font-size:15.5px}
+#detail .meta{font-size:12.5px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{border-bottom:1px solid var(--rule);padding:.25rem .45rem;text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;position:sticky;top:0;background:var(--surface)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--font-mono)}
+td.kn{font-family:var(--font-mono);font-size:11.5px;word-break:break-all;max-width:46rem}
+.tblbox{max-height:34rem;overflow:auto;border:1px solid var(--rule);border-radius:6px}
+.pos{color:var(--rope)} .neg{color:var(--swa)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:0}
+/* heat grid */
+.hg{display:inline-block;min-width:max-content;font-size:11px}
+.hg-row{display:flex;align-items:center;gap:6px;height:14px}
+.hg-head{height:auto;align-items:flex-end;margin-bottom:4px}
+.hg-lab{flex:0 0 74px;display:flex;justify-content:flex-end;align-items:center;gap:4px;font-family:var(--font-mono);font-size:11px}
+.hg-lab em{font-style:normal;padding:0 4px;border-radius:3px;line-height:13px;min-width:28px;text-align:center;font-size:10px}
+.m-swa{background:var(--swa-soft);color:var(--swa)}
+.m-full2,.m-full1{background:var(--csa);color:var(--surface)}
+.m-reindex{background:var(--csa-mid);color:var(--ink)}
+.m-reuse2,.m-reuse1{background:var(--csa-soft);color:var(--csa)}
+.m-draft{background:var(--hca-soft);color:var(--hca)}
+.hg-grp{display:flex;flex-direction:column;gap:3px}
+.hg-grp b{font-size:11px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--rule);white-space:nowrap}
+.hg-cols{display:flex;gap:2px}
+.hg-ch{writing-mode:vertical-rl;transform:rotate(180deg);width:12px;height:84px;font-size:10.5px;line-height:13px;color:var(--muted);white-space:nowrap;overflow:hidden;cursor:pointer}
+.hg-c{display:block;width:12px;height:12px;border-radius:2px;box-shadow:inset 0 0 0 1px var(--rule)}
+.hg-c.has{box-shadow:none;cursor:pointer}
+.hg-c:hover{outline:1.5px solid var(--ink);outline-offset:1px}
+.hg-tot{flex:0 0 110px;display:flex;gap:5px;align-items:center;font-family:var(--font-mono);font-size:10.5px;color:var(--muted)}
+.hg-bar{display:inline-block;height:8px;background:var(--csa-mid);border-radius:0 3px 3px 0}
+.hg-band{font-size:11.5px;font-weight:600;color:var(--muted);margin:7px 0 3px 80px}
+/* tooltip */
+.tip{position:fixed;z-index:50;max-width:380px;background:var(--surface);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:.45rem .6rem;font-size:12px;line-height:1.5;box-shadow:0 6px 20px rgb(0 0 0 / .16);pointer-events:none}
+.tip code{font-size:11px;color:var(--muted);word-break:break-all}
+/* stacked bars & charts */
+.sbar{display:flex;height:26px;border-radius:4px;overflow:hidden;gap:2px;background:var(--surface)}
+.sbar div{height:100%;min-width:1px;position:relative;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-family:var(--font-mono);white-space:nowrap;overflow:hidden}
+.sbar-row{display:grid;grid-template-columns:11rem 1fr 7rem;gap:.6rem;align-items:center;margin:.35rem 0;font-size:12.5px}
+.sbar-row .n{text-align:right;font-family:var(--font-mono)}
+.chart text{fill:var(--muted);font-size:11px;font-family:var(--font-body)}
+.chart .gl{stroke:var(--grid);stroke-width:1}
+.chart .ax{stroke:var(--rule);stroke-width:1}
+.chart .ln{fill:none;stroke-width:2}
+.chart .xh{stroke:var(--muted);stroke-dasharray:3 3}
+.twocol{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1rem}
+@media (max-width:70rem){.twocol{grid-template-columns:1fr}}
+.note{font-size:12.5px;color:var(--muted)}
+.pill{display:inline-block;font-size:11px;padding:0 6px;border-radius:9px;border:1px solid var(--rule);color:var(--muted);margin-left:4px}
+details summary{cursor:pointer;font-weight:600}
+.demo{border:2px solid var(--rope);background:var(--rope-soft);color:var(--ink);border-radius:8px;padding:.6rem .9rem;margin:.8rem 0 0;font-size:13.5px}
+.demo b.big{font-size:16px;color:var(--rope)}
+.btn.ld{border-color:var(--csa);background:var(--csa-soft)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <div class="eyebrow">DeepSeek-V4.1-Flash · ATOM · kernel 级性能看板</div>
+  <h1>kernel 看板：一层里每个 kernel 花了多少时间</h1>
+  <p class="lede">按 batch、token 长度、KV 长度切换，看 prefill / decode 一步里每个算子、每个 kernel 的 GPU 时间。算子表沿用 <a href="../../#x-opgraph">DeepSeek-V4.1-Flash 图解</a>里的 ATOM 算子调用图；kernel 归类规则在 <code>mapping.json</code>，数据由转换脚本从 torch profiler / rocprofv3 trace 生成。</p>
+  <div class="demo" id="demo-banner"><b class="big">示例数据（合成），非真实测量。</b> 页面里的数据集“示例 X / 示例 Y”由玩具代价模型和随机数生成，kernel 名都是占位名（<code>kernel_&lt;算子&gt;_a</code>），只用来展示看板的结构和交互，不代表任何硬件或软件的性能。点“<b>加载数据文件</b>”可选择本机的数据集 JSON、打包好的 <code>bundle.js</code>（含 mapping 时一并替换）或 <code>mapping.json</code>；文件只在浏览器里读取，不会上传。</div>
+  <p class="note" id="gen-note"></p>
+</header>
+
+<div class="ctl" id="ctl">
+  <div class="ctl-row">
+    <label>数据集 A</label><select id="ds-a"></select>
+    <label>对比 B</label><select id="ds-b"><option value="">（不对比）</option></select>
+    <div class="segc" id="phase"><button data-v="decode">decode</button><button data-v="prefill">prefill</button></div>
+    <div class="segc" id="stat" title="每个格子取各 step 的中位数或均值；均值下各项之和等于总时间"><button data-v="mean">均值</button><button data-v="med">中位数</button></div>
+    <label><input type="checkbox" id="memcpy"> 计入 memcpy</label>
+    <label class="btn ld" title="在浏览器本地读取文件，数据不会上传">加载数据文件<input type="file" id="file" accept=".json,.js" multiple hidden></label>
+    <button class="btn" id="theme">深浅色</button>
+  </div>
+  <div class="ctl-row"><span class="dimlab">batch</span><span class="chips" id="dim-batch"></span></div>
+  <div class="ctl-row"><span class="dimlab" id="tk-lab">tk_len</span><span class="chips" id="dim-tk"></span></div>
+  <div class="ctl-row"><span class="dimlab">kv_len</span><span class="chips" id="dim-kv"></span><span class="status" id="status"></span></div>
+</div>
+
+<div id="banners"></div>
+<div class="tiles" id="tiles"></div>
+
+<h2>1 · 一层的 kernel 流程架构图</h2>
+<p class="gist">从上到下：prologue（H2D、embedding、Engram）→ 层前置 → attention 半层（主路径 / 压缩器 / indexer 三条泳道）→ FFN 半层（routed MoE / shared expert 两条泳道）→ epilogue（lm_head、采样、验证）→ DSpark（草稿 KV、3 个草稿块、草稿头）。每个节点：算子名、最耗时的 kernel、GPU 时间（µs/步）、占本步比例、每步调用次数；底色越深越耗时。点节点看 kernel 明细和利用率估算。</p>
+<div class="widget">
+  <div class="ctl-row" style="margin-bottom:.4rem">
+    <label>层范围</label><select id="scope"></select>
+    <span class="legend" style="margin:0"><span class="heatkey">少 <span class="bar"></span> 多（相对图内第 95 百分位节点，超过即最深）</span><span><i style="background:transparent;border:1px dashed var(--muted)"></i>该范围适用但无数据</span></span>
+  </div>
+  <div class="scroll" id="flow"></div>
+</div>
+<div class="widget" id="detail"><p class="note">点击上图节点或热力格查看算子详情。</p></div>
+
+<h2>2 · 层 × 算子热力格</h2>
+<p class="gist">每行一层（L0–L39，DSpark 草稿块 D0–D2），列为算子，按执行顺序分组；颜色为该格 GPU 时间相对全图第 95 百分位（超过即最深色）。行尾是这一层的合计。点格子同样打开详情。</p>
+<div class="widget"><div class="scroll" id="heat"></div></div>
+
+<h2>3 · 按模块汇总</h2>
+<p class="gist">本步 GPU kernel 时间按模块（及子模块）拆分。选了对比 B 时并排显示，B 取同一 (phase, batch, tk, kv) 桶；没有同桶时取最接近的桶并在标题里注明。</p>
+<div class="widget"><div id="modbars"></div><div class="legend" id="mod-legend"></div>
+  <details style="margin-top:.6rem"><summary>子模块明细表</summary><div class="tblbox" style="margin-top:.4rem"><table id="subtbl"></table></div></details>
+</div>
+
+<h2>4 · kernel 排名</h2>
+<p class="gist">本桶所有 kernel（同名 kernel 按算子分开计），点表头排序。grid/block 只有 eager launch 才有（graph 回放的 kernel 在 roctracer 里没有 launch 参数）。</p>
+<div class="widget">
+  <div class="ctl-row" style="margin-bottom:.4rem"><input type="search" id="ksearch" placeholder="按 kernel 名 / 算子过滤（正则）" style="width:22rem"><span class="status" id="kcount"></span></div>
+  <div class="tblbox"><table id="ktbl"></table></div>
+</div>
+
+<h2>5 · scaling 曲线</h2>
+<p class="gist">横轴取一个维度（各档等距），纵轴为线性 GPU 时间。默认固定另外两个维度为当前值；若这样不足 2 个点，则改为“每个横轴值取 step 最多的桶”（标题会注明，其他维度不固定）。</p>
+<div class="widget">
+  <div class="ctl-row" style="margin-bottom:.4rem">
+    <label>横轴</label><div class="segc" id="sx"><button data-v="batch">batch</button><button data-v="tk">tk_len</button><button data-v="kv">kv_len</button></div>
+    <label>纵轴</label><div class="segc" id="sy"><button data-v="step">µs / 步</button><button data-v="tok">µs / token</button></div>
+    <label>序列</label><div class="segc" id="ss"><button data-v="module">模块</button><button data-v="op">选中算子</button></div>
+  </div>
+  <div id="scaling"></div>
+</div>
+
+<h2>6 · 数据集、可信度与待采集</h2>
+<div class="widget" id="dsinfo"></div>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script src="data/demo_bundle.js"></script>
+<script>
+(function(){
+'use strict';
+const $ = (s, r=document) => r.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = (v, d=1) => v == null || isNaN(v) ? '—' : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('en-US') : v.toFixed(d));
+const pct = (a, b) => b > 0 ? (100 * a / b) : 0;
+const SVGNS = 'http://www.w3.org/2000/svg';
+const sv = (t, attrs, txt) => { const e = document.createElementNS(SVGNS, t); for (const k in attrs) e.setAttribute(k, attrs[k]); if (txt != null) e.textContent = txt; return e; };
+
+let DATA = (window.KDASH_DATA || []).slice();
+let DEMO = DATA.length > 0 && DATA.every(d => d.loader && d.loader.includes('synthetic'));
+let MAP = null, OPS = {}, ROWS = {}, MODS = {}, KIND_LAB = {}, LAYERS = [], DRAFTS = [];
+function setMap(m) {
+  MAP = m; OPS = {}; ROWS = {}; MODS = {};
+  MAP.ops.forEach((o, i) => { o._i = i; OPS[o.id] = o; });
+  MAP.rows.forEach(r => ROWS[r.id] = r);
+  MAP.modules.forEach(([id, lab, tok], i) => MODS[id] = {id, lab, tok, i});
+  KIND_LAB = Object.fromEntries(MAP.layout.kinds);
+  LAYERS = MAP.rows.filter(r => r.grid !== false && /^L\d+$/.test(r.id)).map(r => r.id);
+  DRAFTS = MAP.rows.filter(r => /^D\d+$/.test(r.id)).map(r => r.id);
+}
+if (!window.KDASH_MAPPING) { document.body.insertAdjacentHTML('afterbegin', '<p style="padding:2rem;color:red">缺少数据文件（或其中没有 KDASH_MAPPING）。</p>'); return; }
+setMap(window.KDASH_MAPPING);
+const MOD_ORDER = ['attn','moe','comm','dspark','epi','pro','misc','other'];
+const modColor = m => `var(${(MODS[m] || MODS.other).tok})`;
+
+const st = { a: 0, b: '', phase: 'decode', stat: 'mean', memcpy: false, batch: null, tk: null, kv: null, scope: 'all', op: null, sx: 'batch', sy: 'step', ss: 'module', ksort: 'v', kdir: -1 };
+
+/* ---------------- data helpers ---------------- */
+const keyOf = b => [b.batch, b.tk, b.kv == null ? 'na' : b.kv].join('|');
+const dsA = () => DATA[st.a];
+const dsB = () => st.b === '' ? null : DATA[+st.b];
+const bucketsOf = (ds, ph) => ds ? ds.buckets.filter(b => b.phase === ph) : [];
+function findBucket(ds, ph, batch, tk, kv) { return bucketsOf(ds, ph).find(b => b.batch === batch && b.tk === tk && (b.kv == null ? 'na' : b.kv) === kv) || null; }
+function nearestBucket(ds, ph, ref) {
+  const bs = bucketsOf(ds, ph); if (!bs.length || !ref) return null;
+  const lg = x => Math.log2(Math.max(1, x || 1));
+  let best = null, bd = Infinity;
+  for (const b of bs) {
+    const d = Math.abs(lg(b.batch) - lg(ref.batch)) * 1.0 + Math.abs(lg(b.tk) - lg(ref.tk)) * 1.2 + ((b.kv == null || ref.kv == null) ? (b.kv === ref.kv ? 0 : 1.5) : Math.abs(lg(b.kv) - lg(ref.kv)) * .6) - b.n_steps * 1e-4;
+    if (d < bd) { bd = d; best = b; }
+  }
+  return best;
+}
+const curA = () => findBucket(dsA(), st.phase, st.batch, st.tk, st.kv);
+function curB() {
+  const B = dsB(), A = curA(); if (!B || !A) return { b: null, exact: false };
+  const ex = findBucket(B, st.phase, A.batch, A.tk, A.kv == null ? 'na' : A.kv);
+  return ex ? { b: ex, exact: true } : { b: nearestBucket(B, st.phase, A), exact: false };
+}
+const vIdx = () => st.stat === 'med' ? 0 : 1;
+function cellIter(bk, fn) {
+  if (!bk) return;
+  const vi = vIdx();
+  for (const k in bk.cells) {
+    const p = k.indexOf('|'); const row = k.slice(0, p), op = k.slice(p + 1);
+    if (op === 'pro.memcpy' && !st.memcpy) continue;
+    const c = bk.cells[k]; fn(row, op, c[vi], c[2]);
+  }
+}
+function moduleOf(row, op) {
+  if (/^D\d/.test(row)) return 'dspark';
+  if (op.endsWith('.other')) return 'other';
+  const o = OPS[op]; return o ? o.module : 'other';
+}
+function subOf(row, op) {
+  if (/^D\d/.test(row)) return op.startsWith('attn') || op.startsWith('pre') ? '草稿块 attention' : '草稿块 MoE / FFN';
+  if (op.endsWith('.other')) return '未匹配（' + op.split('.')[0] + '）';
+  const o = OPS[op]; return o ? o.sub : op;
+}
+function stepTotal(bk) { let t = 0; cellIter(bk, (r, o, v) => t += v); return t; }
+const opLabel = id => OPS[id] ? OPS[id].label : (id.endsWith('.other') ? '未匹配 kernel（' + id.split('.')[0] + '）' : id);
+const opShort = id => OPS[id] ? OPS[id].short : (id.endsWith('.other') ? '未匹配' : id);
+const heatFill = f => `color-mix(in oklab, var(--heat) ${Math.round(6 + 88 * Math.max(0, Math.min(1, f)))}%, var(--surface))`;
+const heatInk = f => f > .55 ? '#fff' : 'var(--ink)';
+function bjlab(ds, b) { return b ? `${ds.label} · ${b.phase} batch=${b.batch} ${st.phase === 'decode' ? 'q_len' : 'tok'}=${b.tk} kv=${b.kv_label}` : '—'; }
+
+/* scope rows */
+function scopeRows() {
+  if (st.scope === 'all') return LAYERS;
+  if (st.scope.startsWith('kind:')) { const k = st.scope.slice(5); return MAP.rows.filter(r => r.kind === k && /^L/.test(r.id)).map(r => r.id); }
+  if (st.scope.startsWith('row:')) return [st.scope.slice(4)];
+  return LAYERS;
+}
+function scopeKinds() { const s = new Set(scopeRows().map(r => ROWS[r] && ROWS[r].kind)); return s; }
+
+/* ---------------- controls ---------------- */
+function fillDatasets() {
+  const a = $('#ds-a'), b = $('#ds-b');
+  a.innerHTML = ''; b.innerHTML = '<option value="">（不对比）</option>';
+  DATA.forEach((d, i) => { a.add(new Option(`${d.label}（${d.gpu}）`, i)); b.add(new Option(`${d.label}（${d.gpu}）`, i)); });
+  a.value = st.a; b.value = st.b;
+}
+function segc(id, key, cb) {
+  const g = $(id);
+  g.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => { st[key] = btn.dataset.v; syncSeg(); (cb || render)(); }));
+}
+function syncSeg() {
+  [['#phase','phase'],['#stat','stat'],['#sx','sx'],['#sy','sy'],['#ss','ss']].forEach(([id, k]) => $(id).querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === st[k])));
+}
+function ensureBucket() {
+  const bs = bucketsOf(dsA(), st.phase);
+  if (!bs.length) { st.batch = st.tk = st.kv = null; return; }
+  if (!curA()) {
+    const ref = st.batch != null ? { batch: st.batch, tk: st.tk, kv: st.kv === 'na' ? null : st.kv } : null;
+    const b = (ref && nearestBucket(dsA(), st.phase, ref)) || bs.slice().sort((x, y) => y.n_steps - x.n_steps)[0];
+    st.batch = b.batch; st.tk = b.tk; st.kv = b.kv == null ? 'na' : b.kv;
+  }
+}
+function pickDim(dim, val) {
+  const bs = bucketsOf(dsA(), st.phase);
+  const kvk = b => b.kv == null ? 'na' : b.kv;
+  const get = (b, d) => d === 'kv' ? kvk(b) : b[d];
+  const want = { batch: st.batch, tk: st.tk, kv: st.kv }; want[dim] = val;
+  let c = bs.filter(b => get(b, dim) === val);
+  const exact = c.find(b => b.batch === want.batch && b.tk === want.tk && kvk(b) === want.kv);
+  if (exact) { Object.assign(st, want); return; }
+  const others = ['batch', 'tk', 'kv'].filter(d => d !== dim);
+  let best = null, bd = Infinity;
+  for (const b of c) {
+    const d = others.reduce((s, o, i) => s + (get(b, o) === want[o] ? 0 : (i === 0 ? 2 : 1)), 0) - b.n_steps * 1e-4;
+    if (d < bd) { bd = d; best = b; }
+  }
+  if (best) { st.batch = best.batch; st.tk = best.tk; st.kv = kvk(best); }
+}
+function renderDims() {
+  const bs = bucketsOf(dsA(), st.phase);
+  const kvk = b => b.kv == null ? 'na' : b.kv;
+  const dims = [['batch', '#dim-batch', b => b.batch, v => String(v)], ['tk', '#dim-tk', b => b.tk, v => String(v)], ['kv', '#dim-kv', kvk, v => v === 'na' ? '未知' : (v >= 1024 ? (v / 1024) + 'k' : String(v))]];
+  $('#tk-lab').textContent = st.phase === 'decode' ? 'q_len/请求' : 'tok/步(本 rank)';
+  for (const [d, sel, get, lab] of dims) {
+    const host = $(sel); host.innerHTML = '';
+    const vals = [...new Set(bs.map(get))].sort((x, y) => (x === 'na' ? -1 : y === 'na' ? 1 : x - y));
+    if (!vals.length) { host.appendChild(el('span', 'status', '该阶段无数据（待采集）')); continue; }
+    for (const v of vals) {
+      const ok = bs.some(b => get(b) === v && ['batch', 'tk', 'kv'].every(o => o === d || (o === 'kv' ? kvk(b) : b[o]) === st[o]));
+      const btn = el('button', 'chip' + (ok ? '' : ' na'), lab(v));
+      btn.setAttribute('aria-pressed', st[d] === v);
+      const n = bs.filter(b => get(b) === v).reduce((s, b) => s + b.n_steps, 0);
+      btn.title = ok ? `${n} 步（所有组合）` : '与当前其他维度的组合没有数据（待采集）；点击跳到最近的有数据组合';
+      btn.addEventListener('click', () => { pickDim(d, v); render(); });
+      host.appendChild(btn);
+    }
+  }
+}
+function fillScope() {
+  const s = $('#scope'); const cur = st.scope; s.innerHTML = '';
+  s.add(new Option('全部 40 层合计', 'all'));
+  for (const [k, lab] of MAP.layout.kinds) {
+    if (k === 'draft') continue;
+    const n = MAP.rows.filter(r => r.kind === k && /^L/.test(r.id)).length;
+    s.add(new Option(`${lab}（${n} 层合计）`, 'kind:' + k));
+  }
+  LAYERS.forEach(r => s.add(new Option(`${r} · ${KIND_LAB[ROWS[r].kind]}${ROWS[r].note ? ' · ' + ROWS[r].note.slice(0, 18) : ''}`, 'row:' + r)));
+  s.value = cur;
+}
+
+/* ---------------- tiles & banners ---------------- */
+function trustBanner(ds, tag) {
+  const cls = ds.trust === 'high' ? 'ok' : ds.trust === 'medium' ? 'mid' : '';
+  const tl = { high: '可信度高', medium: '可信度中', low: '可信度低', unknown: '可信度未评估' }[ds.trust] || ds.trust;
+  return `<div class="banner ${cls}"><b>${tag} ${esc(ds.label)}</b> · ${esc(ds.gpu)}（${esc(ds.arch)}）· ${esc(ds.graph)} · <b>${tl}</b>${ds.captured ? ' · 抓取 ' + esc(ds.captured) : ''}<br>${esc(ds.note)}</div>`;
+}
+function renderTiles() {
+  const A = curA(); const T = $('#tiles');
+  $('#banners').innerHTML = dsA() ? trustBanner(dsA(), 'A') + (dsB() ? trustBanner(dsB(), 'B') : '') : '';
+  if (!A) { T.innerHTML = '<div><b>—</b><span>该组合无数据（待采集）</span></div>'; $('#status').textContent = ''; return; }
+  const tot = stepTotal(A);
+  const { b: B, exact } = curB(); const tb = B ? stepTotal(B) : null;
+  const items = [
+    [fmt(tot) + ' µs', 'GPU kernel 时间合计 / 步', B ? `B ${fmt(tb)} µs（${tb ? ((tot / tb - 1) * 100).toFixed(1) : '—'}%）${exact ? '' : ' · 非同桶'}` : '各 kernel 时长求和（含多 stream 重叠）'],
+    [fmt(A.step.span_us_med) + ' µs', 'GPU 跨度（中位）', '本步首个 kernel 开始→最后结束'],
+    [fmt(A.step.wall_us_med) + ' µs', 'CPU forward 注解时长（中位）', 'ATOM::forward 范围'],
+    [String(A.n_steps), '步数', `${A.n_ranks} 个 trace · 平均 bs ${fmt(A.bs_mean)} · tok ${fmt(A.tok_mean, 0)}`],
+    [(A.graph_frac * 100).toFixed(0) + '%', 'graph 回放步占比', A.graph_frac > 0 ? (st.phase === 'prefill' ? '含 hipGraphLaunch（解码器尾部 bounded replay 等）' : 'graph 回放下单 kernel 时长可能失真') : 'eager'],
+    [fmt(pct(A.step.unmatched_us_med || 0, A.step.gpu_us_med)) + '%', '未匹配 kernel 占比', 'mapping 未覆盖的时间'],
+    [fmt(A.step.memcpy_us_med) + ' µs', 'memcpy（中位）', st.memcpy ? '已计入合计' : '默认不计入（含等待）'],
+    [A.kv_mean != null ? fmt(A.kv_mean, 0) : '未知', '平均 KV 长度 / 请求', `来源：${A.kv_src}`],
+  ];
+  T.innerHTML = items.map(([b, s, i]) => `<div><b>${b}</b><span>${s}</span><i>${esc(i)}</i></div>`).join('');
+  $('#status').textContent = `当前桶：${A.phase} batch=${A.batch} ${st.phase === 'decode' ? 'q_len' : 'tok'}=${A.tk} kv=${A.kv_label} · spec=${A.spec}`;
+}
+
+/* ---------------- flow diagram ---------------- */
+const LANES = {
+  pre: [['层前置（L1/L14 Engram，L37–39 DSpark 取数）', ['pre.settle', 'pre.eng_wkv', 'pre.eng_gate', 'pre.misc']]],
+  attn: [
+    ['主路径：Q/KV → 稀疏 MLA → o_proj', ['attn.mhc_pre', 'attn.mono_pre', 'attn.wqkv_a', 'attn.qk_norm', 'attn.wq_b', 'attn.rope_window', 'attn.meta', 'attn.sparse_attn', 'attn.inv_rope_quant', 'attn.wo_a', 'attn.wo_b', 'attn.allreduce', 'attn.misc', 'attn.other']],
+    ['压缩器 / SWA 窗口（Full 层写主 KV）', ['attn.kv_compress_proj', 'attn.kv_compress', 'attn.compress_state', 'attn.kv_main_quant', 'attn.kv_main_scatter', 'attn.tail_gather', 'attn.window_write']],
+    ['indexer（Full 全扫 / Reindex 候选池内打分）', ['attn.index_key_proj', 'attn.index_key_norm', 'attn.index_key_rope', 'attn.index_key_write', 'attn.index_q_proj', 'attn.index_weights_proj', 'attn.index_q_rope', 'attn.index_q_quant', 'attn.index_weight_fold', 'attn.index_score', 'attn.candidate_pick', 'attn.index_topk', 'attn.index_lift']],
+  ],
+  ffn: [
+    ['routed MoE：router → dispatch → grouped GEMM → combine', ['ffn.mhc_pre', 'ffn.mono_post', 'ffn.tail_gather', 'ffn.router', 'ffn.topk_gating', 'ffn.ep_dispatch', 'ffn.ep_plan', 'ffn.moe_sort', 'ffn.moe_quant', 'ffn.moe_gemm1', 'ffn.moe_gemm2', 'ffn.ep_combine', 'ffn.allreduce', 'ffn.misc', 'ffn.other']],
+    ['shared expert（副 stream，与 routed 并行）', ['ffn.shared_gate_up', 'ffn.shared_act', 'ffn.shared_down']],
+  ],
+};
+const STRIPS = [
+  ['prologue', ['pro'], ['pro.memcpy', 'pro.h2d', 'pro.fill_ids', 'pro.mono', 'pro.meta', 'pro.embed', 'pro.embed_ar', 'pro.eng_compress', 'pro.eng_snapshot', 'pro.eng_hash', 'pro.eng_uva', 'pro.eng_gather', 'pro.misc', 'pro.other']],
+  ['epilogue：logits、采样、验证', ['epi'], ['epi.settle', 'epi.collapse', 'epi.final_norm', 'epi.lm_head', 'epi.logits_gather', 'epi.sample', 'epi.verify', 'epi.broadcast', 'epi.commit', 'epi.misc', 'epi.other']],
+  ['DSpark：草稿 KV / 准备', ['dkv'], ['dkv.main_proj', 'dkv.main_norm', 'dkv.wkv', 'dkv.kv_tail', 'dkv.window_write', 'dkv.stage', 'dkv.embed', 'dkv.embed_ar', 'dkv.block_state', 'dkv.other']],
+  ['DSpark：3 个草稿块（D0–D2 合计）', DRAFTS, null],
+  ['DSpark：草稿头', ['dhd'], ['dhd.settle', 'dhd.final_norm', 'dhd.lm_head', 'dhd.markov', 'dhd.confidence', 'dhd.misc', 'dhd.other']],
+];
+function opAgg(bk, rows, filterOp) {
+  const rs = new Set(rows); const out = {};
+  cellIter(bk, (r, o, v, n) => { if (!rs.has(r)) return; if (filterOp && !filterOp(o)) return; const e = out[o] || (out[o] = { v: 0, n: 0, rows: 0 }); e.v += v; e.n += n; e.rows++; });
+  return out;
+}
+function topKernel(bk, op) { if (!bk) return null; let best = null; for (const k of bk.kernels) if (k.op === op && (!best || k.mean > best.mean)) best = k; return best; }
+function applicable(op, kinds) {
+  const o = OPS[op]; if (!o) return true;
+  if (o.phases && !o.phases.includes(st.phase)) return false;
+  if (o.rows && o.rows.some(r => kinds.has(ROWS[r] && ROWS[r].kind) && scopeRows().includes(r))) return true;
+  return !!(o.kinds && o.kinds.some(k => kinds.has(k)));
+}
+function renderFlow() {
+  const host = $('#flow'); host.innerHTML = '';
+  const A = curA(); if (!A) { host.appendChild(el('p', 'note', '该组合无数据（待采集）。')); return; }
+  const tot = stepTotal(A);
+  const rows = scopeRows(), kinds = scopeKinds();
+  const agg = opAgg(A, rows);
+  const preAgg = opAgg(A, rows, o => o.startsWith('pre.'));
+  const { b: B } = curB(); const aggB = B ? opAgg(B, rows) : null;
+  const NW = 142, NH = 70, GX = 14, GY = 14, LW = 0, X0 = 8;
+  // compute visible nodes per lane
+  const blocks = [];
+  const showOp = (op, a) => (a && a.v > 0) || (!op.endsWith('.other') && !op.endsWith('.misc') && !(OPS[op] && OPS[op].opt) && applicable(op, kinds));
+  blocks.push(['band', '层前置']); LANES.pre.forEach(l => blocks.push(['lane', l[0], l[1].filter(o => showOp(o, preAgg[o]) && (preAgg[o] && preAgg[o].v > 0))]));
+  blocks.push(['band', 'attention 半层']); LANES.attn.forEach(l => blocks.push(['lane', l[0], l[1].filter(o => showOp(o, agg[o]))]));
+  blocks.push(['band', 'FFN / MoE 半层']); LANES.ffn.forEach(l => blocks.push(['lane', l[0], l[1].filter(o => showOp(o, agg[o]))]));
+  const stripVals = STRIPS.map(([lab, srows, ops]) => {
+    const a = opAgg(A, srows); const ab = B ? opAgg(B, srows) : null;
+    if (!ops) { // draft blocks: group by op
+      return [lab, srows, Object.keys(a).sort((x, y) => (OPS[x] ? OPS[x]._i : 999) - (OPS[y] ? OPS[y]._i : 999)), a, ab];
+    }
+    return [lab, srows, ops.filter(o => a[o] && a[o].v > 0), a, ab];
+  });
+  blocks.push(['band', '步级：prologue / epilogue / DSpark']);
+  stripVals.forEach(s => blocks.push(['strip', s]));
+  // max for heat
+  let mx = 0; const allV = [];
+  Object.entries(agg).forEach(([o, e]) => allV.push(e.v)); Object.values(preAgg).forEach(e => allV.push(e.v));
+  stripVals.forEach(s => s[2].forEach(o => allV.push(s[3][o].v)));
+  mx = robustMax(allV);
+  const maxCols = Math.max(...blocks.filter(b => b[0] !== 'band').map(b => b[0] === 'lane' ? b[2].length : b[1][2].length), 6);
+  const W = X0 + maxCols * (NW + GX) + 10;
+  let y = 6; const nodes = []; const svg = sv('svg', { width: W, height: 10 });
+  const edges = sv('g', {}); svg.appendChild(edges);
+  const laneFirst = {}; const laneLast = {}; const pos = {};
+  for (const b of blocks) {
+    if (b[0] === 'band') { svg.appendChild(sv('text', { x: X0, y: y + 14, class: 'band-lab' }, b[1] + (b[1].includes('半层') || b[1] === '层前置' ? `（${scopeLabel()}）` : ''))); y += 22; continue; }
+    let lab, ops, a, ab, srows = rows;
+    if (b[0] === 'lane') { lab = b[1]; ops = b[2]; a = lab.startsWith('层前置') ? preAgg : agg; ab = aggB; }
+    else { [lab, srows, ops, a, ab] = b[1]; }
+    svg.appendChild(sv('text', { x: X0, y: y + 11, class: 'lane-lab' }, lab + (ops.length ? '' : '：本范围无')));
+    y += 16;
+    if (!ops.length) { y += 4; continue; }
+    ops.forEach((op, i) => {
+      const x = X0 + i * (NW + GX);
+      const e = a[op] || { v: 0, n: 0, rows: 0 };
+      const f = e.v / mx;
+      const g = sv('g', { class: 'fn' + (st.op === op ? ' sel' : '') + (e.v > 0 ? '' : ' nodata'), transform: `translate(${x},${y})`, tabindex: 0 });
+      g.appendChild(sv('rect', { class: 'box', width: NW, height: NH, rx: 6, fill: e.v > 0 ? heatFill(f) : 'transparent' }));
+      const ink = e.v > 0 ? heatInk(f) : 'var(--muted)';
+      const modc = /^D\d/.test(srows[0] || '') ? 'dspark' : (OPS[op] ? OPS[op].module : 'other');
+      g.appendChild(sv('rect', { x: 0, y: 0, width: 4, height: NH, fill: modColor(modc), rx: 2 }));
+      g.appendChild(sv('text', { x: 9, y: 15, 'font-size': 12, 'font-weight': 600, fill: ink }, trunc(opShort(op), 17)));
+      const tk = topKernel(A, op);
+      g.appendChild(sv('text', { x: 9, y: 29, 'font-size': 9.5, class: 'k', fill: ink, opacity: .85 }, tk ? trunc(tk.name, 24) : (e.v > 0 ? '' : '无数据 / 待采集')));
+      if (e.v > 0) {
+        g.appendChild(sv('text', { x: 9, y: 46, 'font-size': 12, class: 'v', fill: ink }, `${fmt(e.v)} µs · ${pct(e.v, tot).toFixed(1)}%`));
+        let sub = `×${fmt(e.n, e.n < 10 ? 1 : 0)}/步`;
+        if (ab && ab[op]) { const d = (e.v / ab[op].v - 1) * 100; sub += ` · B ${d >= 0 ? '+' : ''}${d.toFixed(0)}%`; } else if (ab) sub += ' · B 无';
+        g.appendChild(sv('text', { x: 9, y: 61, 'font-size': 10.5, fill: ink, opacity: .9 }, sub));
+      }
+      g.addEventListener('click', () => { st.op = op; st.detailRows = srows; renderFlow(); renderDetail(); if (st.ss === 'op') renderScaling(); });
+      g.addEventListener('mousemove', ev => showTip(ev, `<b>${esc(opLabel(op))}</b><br>${esc(OPS[op] ? OPS[op].what : '')}<br><code>${esc(tk ? tk.name : '')}</code>`));
+      g.addEventListener('mouseleave', hideTip);
+      svg.appendChild(g);
+      pos[lab + '|' + op] = [x, y];
+      if (i > 0) edges.appendChild(sv('path', { class: 'edge', d: `M${x - GX},${y + NH / 2} L${x - 2},${y + NH / 2}`, 'marker-end': 'url(#arr)' }));
+    });
+    laneFirst[lab] = [X0, y]; laneLast[lab] = [X0 + (ops.length - 1) * (NW + GX) + NW, y];
+    y += NH + GY;
+  }
+  const defs = sv('defs', {}); const mk = sv('marker', { id: 'arr', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 6, markerHeight: 6, orient: 'auto' });
+  mk.appendChild(sv('path', { d: 'M0,0 L8,4 L0,8 z', fill: 'var(--muted)' })); defs.appendChild(mk); svg.insertBefore(defs, svg.firstChild);
+  svg.setAttribute('height', y + 4); svg.setAttribute('viewBox', `0 0 ${W} ${y + 4}`);
+  host.appendChild(svg);
+}
+function scopeLabel() { const r = scopeRows(); if (st.scope === 'all') return '40 层合计'; if (st.scope.startsWith('kind:')) return `${KIND_LAB[st.scope.slice(5)]} ×${r.length} 层合计`; return r[0]; }
+// colour scale cap = 95th percentile, so one outlier cell does not wash everything else out
+function robustMax(vs) { const a = vs.filter(v => v > 0).sort((x, y) => x - y); if (!a.length) return 1e-9; return Math.max(1e-9, a[Math.min(a.length - 1, Math.floor(.95 * (a.length - 1)))]); }
+const trunc = (s, n) => (s = String(s || '')).length > n ? s.slice(0, n - 1) + '…' : s;
+
+/* ---------------- detail ---------------- */
+function estimate(op, A, ds, perLayerUs, callsPerLayer) {
+  const o = OPS[op]; if (!o || !o.est || !A) return null;
+  const e = o.est, M = MAP.model;
+  const T = A.tok_mean;
+  let rows = e.rows === 'T*topk' ? T * M.topk : e.rows === 'T_logits' ? (st.phase === 'decode' ? T : A.bs_mean) : T;
+  let k = e.k, n = e.n;
+  const at = ds.attn_tp || 1, tp = ds.tp || 1, ep = ds.ep || 1;
+  if (e.shard === 'attn_tp') n /= at; else if (e.shard === 'attn_tp_k') k /= at; else if (e.shard === 'tp') n /= tp; else if (e.shard === 'tp_k') k /= tp;
+  let wBytes = k * n * e.w_bits / 8;
+  if (e.kind === 'moe_gemm') { const eLoc = M.n_routed_experts / ep; const active = Math.min(eLoc, rows); wBytes *= active; }
+  const flops = 2 * rows * k * n;
+  const bytes = wBytes + rows * k * e.a_bits / 8 + rows * n * 2;
+  const t = perLayerUs * 1e-6; if (!(t > 0)) return null;
+  const arch = MAP.arch[ds.arch] || {};
+  const pk = (arch.peak_tflops || {})[e.a_bits <= 8 ? 'fp8' : 'bf16'];
+  const tf = flops / t / 1e12, bw = bytes / t / 1e12;
+  return { rows, k, n, flops, bytes, tf, bw, pk, hbm: arch.hbm_tbps, note: e.note, peakNote: arch.peak_note || '当前 mapping 里没有该数据集架构的峰值，不算百分比。', moe: e.kind === 'moe_gemm', ep };
+}
+function renderDetail() {
+  const host = $('#detail'); const op = st.op; const A = curA();
+  if (!op || !A) { host.innerHTML = '<p class="note">点击上图节点或热力格查看算子详情。</p>'; return; }
+  const o = OPS[op] || {}; const ds = dsA(); const tot = stepTotal(A);
+  const rowsIn = st.detailRows || scopeRows();
+  const agg = opAgg(A, rowsIn)[op] || { v: 0, n: 0, rows: 0 };
+  const { b: B } = curB(); const aggB = B ? (opAgg(B, rowsIn)[op] || null) : null;
+  // per-row distribution (all rows)
+  const perRow = []; cellIter(A, (r, oo, v, n) => { if (oo === op) perRow.push([r, v, n]); });
+  const ks = A.kernels.filter(k => k.op === op);
+  const kB = B ? Object.fromEntries(B.kernels.filter(k => k.op === op).map(k => [k.name, k])) : {};
+  const nRows = Math.max(1, agg.rows);
+  const est = estimate(op, A, ds, agg.v / nRows, agg.n / nRows);
+  let h = `<h3><span class="dot" style="background:${modColor(o.module || 'other')}"></span>${esc(opLabel(op))} <span class="pill">${esc(op)}</span> <span class="pill">${esc((MODS[o.module] || MODS.other).lab)} / ${esc(o.sub || '')}</span></h3>`;
+  h += `<div class="meta">${esc(o.what || '')}<br>实现：${esc(o.impl || '—')}　源码：<code>${esc(o.src || '—')}</code></div>`;
+  h += `<div class="tiles" style="margin:.5rem 0"><div><b>${fmt(agg.v)} µs</b><span>本范围（${esc(rowsIn.length > 3 ? scopeLabel() : rowsIn.join(','))}）合计 / 步</span><i>占本步 ${pct(agg.v, tot).toFixed(2)}%</i></div>`;
+  h += `<div><b>${fmt(agg.n, 1)}</b><span>调用次数 / 步</span><i>出现在 ${agg.rows} 个行</i></div>`;
+  h += `<div><b>${fmt(agg.v / nRows)} µs</b><span>每层（每行）平均</span><i>${fmt(agg.n / nRows, 1)} 次 / 层</i></div>`;
+  if (aggB) h += `<div><b>${fmt(aggB.v)} µs</b><span>B 同范围</span><i>A−B ${fmt(agg.v - aggB.v)} µs（${((agg.v / aggB.v - 1) * 100).toFixed(1)}%）</i></div>`;
+  h += '</div>';
+  if (est) {
+    const pkTxt = est.pk ? `，峰值 ${est.pk} TFLOPS 的 ${(100 * est.tf / est.pk).toFixed(1)}%` : '（该精度峰值未公开，不算百分比）';
+    h += `<div class="banner mid"><b>利用率估算（每层一次调用）</b>：形状 ${esc(est.note)}；按 rows≈${fmt(est.rows, 0)}${est.moe ? `（T×topk，假设 EP${est.ep} 下各 rank 均衡）` : ''}、K=${est.k}、N=${est.n} 计 ${(est.flops / 1e9).toFixed(2)} GFLOP、${(est.bytes / 1e6).toFixed(2)} MB → <b>${est.tf.toFixed(1)} TFLOPS</b>${pkTxt}；<b>${(est.bw * 1000).toFixed(0)} GB/s</b>${est.hbm ? `，HBM ${est.hbm} TB/s 的 ${(100 * est.bw / est.hbm).toFixed(1)}%` : ''}。<br>假设：T 取本桶平均 tok/步（本 rank）；prefill 解码器层实际只算尾部行，估算偏高；graph 回放下 kernel 时长不可信时估算同样不可信。${esc(est.peakNote || '')}</div>`;
+  }
+  // per-row mini bars
+  if (perRow.length > 1) {
+    const mx = Math.max(...perRow.map(p => p[1]), 1e-9);
+    const order = r => r === 'pro' ? -1 : /^L/.test(r) ? +r.slice(1) : /^D/.test(r) ? 100 + +r.slice(1) : 200;
+    perRow.sort((a, b) => order(a[0]) - order(b[0]));
+    h += '<div class="note">各行分布（µs/步）：</div><div style="display:flex;align-items:flex-end;gap:2px;height:70px;margin:.2rem 0 .6rem">' +
+      perRow.map(([r, v, n]) => `<div title="${r}: ${fmt(v)} µs, ${fmt(n, 1)} 次" style="width:12px;height:${Math.max(1, 64 * v / mx)}px;background:var(--csa-mid);border-radius:3px 3px 0 0"></div>`).join('') + '</div>';
+  }
+  h += `<div class="tblbox"><table><thead><tr><th>kernel（本桶所有行合计）</th><th class="n">µs/步</th><th class="n">次/步</th><th class="n">单次 p50</th><th class="n">min–max</th><th>grid / block</th><th class="n">行数</th>${B ? '<th class="n">B µs/步</th><th class="n">Δ</th>' : ''}</tr></thead><tbody>`;
+  const vk = st.stat === 'med' ? 'us' : 'mean';
+  for (const k of ks.sort((a, b) => b[vk] - a[vk])) {
+    const kb = kB[k.name];
+    h += `<tr><td class="kn">${esc(k.name)}</td><td class="n">${fmt(k[vk])}</td><td class="n">${fmt(k.n, 1)}</td><td class="n">${fmt(k.call_p50, 2)}</td><td class="n">${fmt(k.call_min, 1)}–${fmt(k.call_max, 1)}</td><td class="mono">${k.grid ? esc(k.grid.join('×')) + ' / ' + esc((k.block || []).join('×')) : '—（graph）'}</td><td class="n">${k.rows}</td>${B ? `<td class="n">${kb ? fmt(kb[vk]) : '—'}</td><td class="n ${kb && k[vk] > kb[vk] ? 'pos' : 'neg'}">${kb ? fmt(k[vk] - kb[vk]) : '—'}</td>` : ''}</tr>`;
+  }
+  h += '</tbody></table></div>';
+  host.innerHTML = h;
+}
+
+/* ---------------- heat grid ---------------- */
+function renderHeat() {
+  const host = $('#heat'); host.innerHTML = '';
+  const A = curA(); if (!A) { host.appendChild(el('p', 'note', '该组合无数据（待采集）。')); return; }
+  const vals = {}; let mx = 0; const used = new Set();
+  cellIter(A, (r, o, v, n) => { if (!/^[LD]\d/.test(r)) return; vals[r + '|' + o] = [v, n]; used.add(o); });
+  mx = robustMax(Object.values(vals).map(v => v[0]));
+  const groups = [['pre', '层前置'], ['attn', 'attention'], ['ffn', 'FFN / MoE']];
+  const cols = groups.map(([g, lab]) => [lab, MAP.ops.filter(o => o.group === g && used.has(o.id)).map(o => o.id).concat(used.has(g + '.other') ? [g + '.other'] : [])]);
+  const grid = el('div', 'hg');
+  const head = el('div', 'hg-row hg-head'); head.appendChild(el('div', 'hg-lab'));
+  for (const [lab, ops] of cols) { if (!ops.length) continue; const g = el('div', 'hg-grp'); g.appendChild(el('b', null, lab)); const cs = el('div', 'hg-cols'); ops.forEach(o => { const c = el('span', 'hg-ch', opShort(o)); c.title = opLabel(o); c.addEventListener('click', () => { st.op = o; st.detailRows = null; renderAll(); }); cs.appendChild(c); }); g.appendChild(cs); head.appendChild(g); }
+  head.appendChild(el('div', 'hg-tot', '行合计'));
+  grid.appendChild(head);
+  const rowsAll = LAYERS.concat(DRAFTS);
+  const rowTot = r => Object.entries(vals).filter(([k]) => k.startsWith(r + '|')).reduce((s, [, v]) => s + v[0], 0);
+  const mxRow = Math.max(...rowsAll.map(rowTot), 1e-9);
+  let band = null;
+  for (const r of rowsAll) {
+    const rb = ROWS[r] ? ROWS[r].band : 'dft';
+    if (rb !== band) { band = rb; grid.appendChild(el('div', 'hg-band', MAP.layout.bands[rb] || rb)); }
+    const row = el('div', 'hg-row');
+    const lab = el('div', 'hg-lab'); const kind = ROWS[r] ? ROWS[r].kind : 'draft';
+    const em = el('em', 'm-' + kind, KIND_LAB[kind] ? KIND_LAB[kind].replace(/ m=\d/, '').replace('只有 ', '').slice(0, 7) : kind); lab.append(em, document.createTextNode(r)); row.appendChild(lab);
+    for (const [, ops] of cols) {
+      if (!ops.length) continue; const cs = el('div', 'hg-cols');
+      ops.forEach(o => {
+        const v = vals[r + '|' + o]; const c = el('span', 'hg-c' + (v ? ' has' : ''));
+        if (v) { c.style.background = heatFill(v[0] / mx); c.addEventListener('click', () => { st.op = o; st.detailRows = [r]; renderFlow(); renderDetail(); $('#detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+          c.addEventListener('mousemove', ev => showTip(ev, `<b>${r} · ${esc(opLabel(o))}</b><br>${fmt(v[0])} µs/步 · ${fmt(v[1], 1)} 次 · 占本步 ${pct(v[0], stepTotal(A)).toFixed(2)}%`)); c.addEventListener('mouseleave', hideTip); }
+        cs.appendChild(c);
+      });
+      row.appendChild(cs);
+    }
+    const t = rowTot(r); const tt = el('div', 'hg-tot'); const bar = el('span', 'hg-bar'); bar.style.width = Math.round(60 * t / mxRow) + 'px'; tt.append(bar, document.createTextNode(fmt(t))); row.appendChild(tt);
+    grid.appendChild(row);
+  }
+  host.appendChild(grid);
+}
+
+/* ---------------- module bars ---------------- */
+function modAgg(bk) { const m = {}, s = {}; cellIter(bk, (r, o, v) => { const md = moduleOf(r, o); m[md] = (m[md] || 0) + v; const k = md + '||' + subOf(r, o); s[k] = (s[k] || 0) + v; }); return { m, s }; }
+function renderMods() {
+  const host = $('#modbars'); host.innerHTML = '';
+  const A = curA(); if (!A) { host.innerHTML = '<p class="note">该组合无数据（待采集）。</p>'; return; }
+  const { b: B, exact } = curB();
+  const ma = modAgg(A), mb = B ? modAgg(B) : null;
+  const ta = Object.values(ma.m).reduce((s, v) => s + v, 0), tb = mb ? Object.values(mb.m).reduce((s, v) => s + v, 0) : 0;
+  const scale = Math.max(ta, tb);
+  const bar = (agg, tot, lab) => {
+    const r = el('div', 'sbar-row'); r.appendChild(el('div', null, lab));
+    const sb = el('div', 'sbar'); sb.style.width = (100 * tot / scale).toFixed(1) + '%';
+    for (const m of MOD_ORDER) { const v = agg.m[m]; if (!v) continue; const d = el('div'); d.style.flex = `${v} 0 0`; d.style.background = modColor(m); if (m === 'other') d.style.backgroundImage = 'repeating-linear-gradient(135deg,transparent 0 3px,rgba(255,255,255,.35) 3px 5px)'; if (v / tot > .07) d.textContent = (100 * v / tot).toFixed(0) + '%';
+      d.addEventListener('mousemove', ev => showTip(ev, `<b>${esc(MODS[m].lab)}</b><br>${fmt(v)} µs/步 · ${pct(v, tot).toFixed(1)}%`)); d.addEventListener('mouseleave', hideTip); sb.appendChild(d); }
+    const w = el('div'); w.appendChild(sb); r.appendChild(w); r.appendChild(el('div', 'n', fmt(tot) + ' µs')); return r;
+  };
+  host.appendChild(bar(ma, ta, 'A ' + trunc(dsA().label, 16)));
+  if (mb) host.appendChild(bar(mb, tb, 'B ' + trunc(dsB().label, 16) + (exact ? '' : '*')));
+  if (mb && !exact) host.appendChild(el('p', 'note', `* B 没有同一桶，取最接近的：${bjlab(dsB(), B)}`));
+  $('#mod-legend').innerHTML = MOD_ORDER.filter(m => ma.m[m] || (mb && mb.m[m])).map(m => `<span><i style="background:${modColor(m)}"></i>${esc(MODS[m].lab)}</span>`).join('');
+  const keys = [...new Set(Object.keys(ma.s).concat(mb ? Object.keys(mb.s) : []))].sort((x, y) => (MOD_ORDER.indexOf(x.split('||')[0]) - MOD_ORDER.indexOf(y.split('||')[0])) || ((ma.s[y] || 0) - (ma.s[x] || 0)));
+  let h = `<thead><tr><th>模块</th><th>子模块</th><th class="n">A µs/步</th><th class="n">A %</th>${mb ? '<th class="n">B µs/步</th><th class="n">A−B µs</th>' : ''}</tr></thead><tbody>`;
+  for (const k of keys) { const [m, s] = k.split('||'); const va = ma.s[k] || 0, vb = mb ? (mb.s[k] || 0) : 0;
+    h += `<tr><td><span class="dot" style="background:${modColor(m)}"></span>${esc(MODS[m].lab)}</td><td>${esc(s)}</td><td class="n">${fmt(va)}</td><td class="n">${pct(va, ta).toFixed(1)}</td>${mb ? `<td class="n">${fmt(vb)}</td><td class="n ${va > vb ? 'pos' : 'neg'}">${fmt(va - vb)}</td>` : ''}</tr>`; }
+  $('#subtbl').innerHTML = h + '</tbody>';
+}
+
+/* ---------------- kernel table ---------------- */
+function renderKtbl() {
+  const A = curA(); const t = $('#ktbl');
+  if (!A) { t.innerHTML = '<tr><td>该组合无数据（待采集）</td></tr>'; return; }
+  const { b: B } = curB();
+  const vk = st.stat === 'med' ? 'us' : 'mean';
+  const kB = B ? Object.fromEntries(B.kernels.map(k => [k.op + '||' + k.name, k])) : {};
+  let rx = null; try { rx = $('#ksearch').value ? new RegExp($('#ksearch').value, 'i') : null; } catch (e) { rx = null; }
+  const tot = stepTotal(A);
+  let ks = A.kernels.filter(k => (st.memcpy || k.op !== 'pro.memcpy') && (!rx || rx.test(k.name) || rx.test(k.op) || rx.test(opLabel(k.op))));
+  const sortKey = { v: k => k[vk], n: k => k.n, p: k => k.call_p50, name: k => k.name, op: k => k.op, b: k => (kB[k.op + '||' + k.name] || {})[vk] || 0, d: k => k[vk] - ((kB[k.op + '||' + k.name] || {})[vk] || 0) }[st.ksort];
+  ks.sort((a, b) => { const x = sortKey(a), y = sortKey(b); return (x < y ? -1 : x > y ? 1 : 0) * st.kdir; });
+  $('#kcount').textContent = `${ks.length} 个（显示前 400）`;
+  const th = (k, lab, cls) => `<th class="${cls || ''}" data-k="${k}">${lab}${st.ksort === k ? (st.kdir < 0 ? ' ↓' : ' ↑') : ''}</th>`;
+  let h = '<thead><tr>' + th('name', 'kernel') + th('op', '算子 / 模块') + th('v', 'µs/步', 'n') + '<th class="n">%</th>' + th('n', '次/步', 'n') + th('p', '单次 p50', 'n') + '<th class="n">min–max</th><th>grid / block</th><th class="n">行</th>' + (B ? th('b', 'B µs/步', 'n') + th('d', 'A−B', 'n') : '') + '</tr></thead><tbody>';
+  for (const k of ks.slice(0, 400)) {
+    const kb = kB[k.op + '||' + k.name]; const m = moduleOf('L0', k.op);
+    h += `<tr><td class="kn">${esc(k.name)}</td><td><span class="dot" style="background:${modColor(m)}"></span>${esc(opShort(k.op))}<br><span class="note">${esc(k.op)}</span></td><td class="n">${fmt(k[vk])}</td><td class="n">${pct(k[vk], tot).toFixed(2)}</td><td class="n">${fmt(k.n, 1)}</td><td class="n">${fmt(k.call_p50, 2)}</td><td class="n">${fmt(k.call_min, 1)}–${fmt(k.call_max, 1)}</td><td class="mono">${k.grid ? esc(k.grid.join('×')) + ' / ' + esc((k.block || []).join('×')) : '—'}</td><td class="n">${k.rows}</td>${B ? `<td class="n">${kb ? fmt(kb[vk]) : '—'}</td><td class="n ${kb && k[vk] > kb[vk] ? 'pos' : 'neg'}">${kb ? fmt(k[vk] - kb[vk]) : 'B 无'}</td>` : ''}</tr>`;
+  }
+  t.innerHTML = h + '</tbody>';
+  t.querySelectorAll('th[data-k]').forEach(x => x.addEventListener('click', () => { const k = x.dataset.k; if (st.ksort === k) st.kdir *= -1; else { st.ksort = k; st.kdir = (k === 'name' || k === 'op') ? 1 : -1; } renderKtbl(); }));
+}
+
+/* ---------------- scaling ---------------- */
+function scalingPoints(ds) {
+  if (!ds) return { pts: [], fixed: true };
+  const bs = bucketsOf(ds, st.phase); const kvk = b => b.kv == null ? 'na' : b.kv;
+  const get = (b, d) => d === 'kv' ? kvk(b) : b[d];
+  const others = ['batch', 'tk', 'kv'].filter(d => d !== st.sx);
+  let pts = bs.filter(b => others.every(o => get(b, o) === st[o]));
+  let fixed = true;
+  if (pts.length < 2) { fixed = false; const by = {}; bs.forEach(b => { const x = get(b, st.sx); if (!by[x] || by[x].n_steps < b.n_steps) by[x] = b; }); pts = Object.values(by); }
+  pts.sort((a, b) => { const x = get(a, st.sx), y = get(b, st.sx); return x === 'na' ? -1 : y === 'na' ? 1 : x - y; });
+  return { pts, fixed, get };
+}
+function seriesOf(bk) {
+  const div = st.sy === 'tok' ? Math.max(1, bk.tok_mean) : 1;
+  if (st.ss === 'op' && st.op) { let v = 0; cellIter(bk, (r, o, x) => { if (o === st.op) v += x; }); return { [opShort(st.op)]: v / div }; }
+  const { m } = modAgg(bk); const out = { '合计': Object.values(m).reduce((s, v) => s + v, 0) / div };
+  for (const k of MOD_ORDER) if (m[k]) out[k] = m[k] / div;
+  return out;
+}
+function renderScaling() {
+  const host = $('#scaling'); host.innerHTML = '';
+  const A = scalingPoints(dsA());
+  if (A.pts.length < 2) { host.innerHTML = '<p class="note">当前阶段只有一个桶，无法画 scaling（待采集更多档位，见第 6 节 sweep）。</p>'; return; }
+  const B = dsB() ? scalingPoints(dsB()) : null;
+  const xs = [...new Set(A.pts.map(b => A.get(b, st.sx)).concat(B ? B.pts.map(b => B.get(b, st.sx)) : []))].sort((x, y) => x === 'na' ? -1 : y === 'na' ? 1 : x - y);
+  const sa = A.pts.map(b => [A.get(b, st.sx), seriesOf(b), b]);
+  const sb = B ? B.pts.map(b => [B.get(b, st.sx), seriesOf(b), b]) : [];
+  const names = Object.keys(sa[0][1]).concat(sa.flatMap(p => Object.keys(p[1]))).filter((v, i, a) => a.indexOf(v) === i);
+  const ymax = Math.max(...sa.flatMap(p => Object.values(p[1])), ...sb.map(p => p[1][names[0]] || 0), 1e-9) * 1.08;
+  const W = Math.min(1100, Math.max(560, host.clientWidth || 900)), H = 340, ml = 64, mr = 120, mt = 16, mb = 42;
+  const X = i => ml + (xs.length === 1 ? (W - ml - mr) / 2 : i * (W - ml - mr) / (xs.length - 1));
+  const Y = v => mt + (H - mt - mb) * (1 - v / ymax);
+  const svg = sv('svg', { width: W, height: H, class: 'chart' });
+  const nt = 5; for (let i = 0; i <= nt; i++) { const v = ymax * i / nt; svg.appendChild(sv('line', { x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), class: 'gl' })); svg.appendChild(sv('text', { x: ml - 6, y: Y(v) + 4, 'text-anchor': 'end' }, fmt(v, v < 10 ? 2 : 0))); }
+  svg.appendChild(sv('line', { x1: ml, x2: W - mr, y1: Y(0), y2: Y(0), class: 'ax' }));
+  xs.forEach((x, i) => svg.appendChild(sv('text', { x: X(i), y: H - mb + 16, 'text-anchor': 'middle' }, x === 'na' ? '未知' : String(x))));
+  svg.appendChild(sv('text', { x: (ml + W - mr) / 2, y: H - 6, 'text-anchor': 'middle' }, { batch: 'batch（每 rank 请求数；decode 为 graph 尺寸）', tk: st.phase === 'decode' ? 'q_len / 请求' : 'tok / 步（本 rank）', kv: 'kv_len 档' }[st.sx]));
+  svg.appendChild(sv('text', { x: 14, y: mt + 4 }, st.sy === 'tok' ? 'µs / token' : 'µs / 步'));
+  const colOf = n => n === '合计' ? 'var(--ink)' : MODS[n] ? modColor(n) : 'var(--heat)';
+  const lab = n => n === '合计' ? '合计' : MODS[n] ? MODS[n].lab.split('（')[0].split('：')[0] : n;
+  const draw = (ser, n, dash) => {
+    const pts = ser.filter(p => p[1][n] != null).map(p => [X(xs.indexOf(p[0])), Y(p[1][n])]);
+    if (!pts.length) return;
+    svg.appendChild(sv('path', { class: 'ln', d: pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ',' + p[1]).join(''), stroke: colOf(n), 'stroke-dasharray': dash || '' }));
+    pts.forEach(p => svg.appendChild(sv('circle', { cx: p[0], cy: p[1], r: 4, fill: colOf(n), stroke: 'var(--surface)', 'stroke-width': 2 })));
+    if (!dash) { const l = pts[pts.length - 1]; svg.appendChild(sv('text', { x: l[0] + 8, y: l[1] + 4, fill: 'var(--ink)' }, lab(n))); }
+  };
+  names.forEach(n => draw(sa, n));
+  if (sb.length) draw(sb, names[0], '5 4');
+  const xh = sv('line', { y1: mt, y2: H - mb, class: 'xh', visibility: 'hidden' }); svg.appendChild(xh);
+  const hit = sv('rect', { x: ml, y: mt, width: W - ml - mr, height: H - mt - mb, fill: 'transparent' }); svg.appendChild(hit);
+  hit.addEventListener('mousemove', ev => {
+    const r = svg.getBoundingClientRect(); const px = ev.clientX - r.left; let bi = 0, bd = 1e9; xs.forEach((x, i) => { const d = Math.abs(X(i) - px); if (d < bd) { bd = d; bi = i; } });
+    xh.setAttribute('x1', X(bi)); xh.setAttribute('x2', X(bi)); xh.setAttribute('visibility', 'visible');
+    const pa = sa.find(p => p[0] === xs[bi]); const pb = sb.find(p => p[0] === xs[bi]);
+    let h = `<b>${st.sx} = ${xs[bi] === 'na' ? '未知' : xs[bi]}</b>`;
+    if (pa) h += `<br>A 桶 ${esc(pa[2].key)}（${pa[2].n_steps} 步）<br>` + names.map(n => `<span class="dot" style="background:${colOf(n)}"></span>${esc(lab(n))}：${fmt(pa[1][n], 2)}`).join('<br>');
+    if (pb) h += `<br>B ${esc(pb[2].key)}：${esc(lab(names[0]))} ${fmt(pb[1][names[0]], 2)}`;
+    showTip(ev, h);
+  });
+  hit.addEventListener('mouseleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
+  const cap = el('p', 'note', `A：${dsA().label}${A.fixed ? '（其他两维固定为当前值）' : '（其他维度不固定：每个横轴值取 step 最多的桶）'}${B ? ` · 虚线 B：${dsB().label} 的${lab(names[0])}${B.fixed ? '' : '（其他维度不固定）'}` : ''}${st.ss === 'op' && !st.op ? ' · 尚未选中算子，显示模块' : ''}`);
+  host.append(cap, svg);
+  const lg = el('div', 'legend'); lg.innerHTML = names.map(n => `<span><i style="background:${colOf(n)}"></i>${esc(lab(n))}</span>`).join('') + (sb.length ? '<span><i style="background:transparent;border-top:2px dashed var(--ink);height:0;width:16px"></i>B</span>' : '');
+  host.appendChild(lg);
+}
+
+/* ---------------- dataset info ---------------- */
+function renderInfo() {
+  let h = '<table><thead><tr><th>数据集</th><th>GPU</th><th>来源 / 配置</th><th>graph</th><th>可信度与说明</th><th class="n">桶数</th><th class="n">步数</th></tr></thead><tbody>';
+  for (const d of DATA) {
+    h += `<tr><td><b>${esc(d.label)}</b><br><span class="note">${esc(d.id)}</span></td><td>${esc(d.gpu)}<br><span class="note">${esc(d.arch)}</span></td><td>${esc(d.source)}<br><span class="note">${esc(d.config)}</span><br><span class="note">${esc(d.captured ? '抓取：' + d.captured : '')}　生成：${esc(d.generated)}</span></td><td>${esc(d.graph)}</td><td>${esc(d.trust)}：${esc(d.note)}</td><td class="n">${d.buckets.length}</td><td class="n">${d.buckets.reduce((s, b) => s + b.n_steps, 0)}</td></tr>`;
+  }
+  h += '</tbody></table>';
+  h += `<h3 style="font-size:15px;margin-top:1rem">待采集（看板里对应位置显示为灰色/“待采集”）</h3><ul class="note">
+<li><b>decode 的 kv_len</b>：graph decode 的注解里默认没有 KV 长度（显示“未知”）。开 <code>ATOM_ENABLE_DETAILED_ANNOTATION=1</code>（注解带 sk=ΣKV）并逐档固定 prompt 长度可以补上。</li>
+<li><b>可信 kernel 时长</b>：graph 回放下 profiler 记录的单 kernel 时长可能失真；以 eager 或 rocprofv3 数据为准。</li>
+<li><b>规整的 batch / tk / kv 网格</b>：真实负载的随机快照只覆盖负载自然出现的组合；scaling 曲线的“其他维度不固定”点不能直接比较，建议用固定形状的 sweep 补齐。</li>
+</ul>`;
+  $('#dsinfo').innerHTML = h;
+}
+
+/* ---------------- tooltip ---------------- */
+const tip = $('#tip');
+function showTip(ev, html) { tip.innerHTML = html; tip.hidden = false; const w = tip.offsetWidth, h = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14; tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
+function hideTip() { tip.hidden = true; }
+
+/* ---------------- wiring ---------------- */
+function renderAll() { ensureBucket(); syncSeg(); renderDims(); renderTiles(); renderFlow(); renderDetail(); renderHeat(); renderMods(); renderKtbl(); renderScaling(); }
+const render = renderAll;
+function init() {
+  if (!DATA.length) { $('#banners').innerHTML = '<div class="banner">没有数据集。点“加载数据文件”选择本机的数据集 JSON 或 bundle.js。</div>'; }
+  $('#demo-banner').hidden = !DEMO;
+  fillDatasets(); fillScope(); syncSeg();
+  $('#gen-note').textContent = `已载入 ${DATA.length} 个数据集；mapping：${MAP.generated_from}`;
+  if (DATA.length > 1 && st.b === '') { /* leave B empty by default */ }
+  $('#ds-a').addEventListener('change', e => { st.a = +e.target.value; st.batch = null; render(); });
+  $('#ds-b').addEventListener('change', e => { st.b = e.target.value; render(); });
+  $('#scope').addEventListener('change', e => { st.scope = e.target.value; st.detailRows = null; renderFlow(); renderDetail(); });
+  $('#memcpy').addEventListener('change', e => { st.memcpy = e.target.checked; render(); });
+  $('#ksearch').addEventListener('input', renderKtbl);
+  $('#theme').addEventListener('click', () => { const r = document.documentElement; const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; r.dataset.theme = dark ? 'light' : 'dark'; render(); });
+  /* local files only (FileReader); accepts dataset JSON, a JSON list of datasets, bundle.js
+     (window.KDASH_DATA = [...]; window.KDASH_MAPPING = {...};) or mapping.json. The first real
+     dataset replaces the synthetic demo datasets. */
+  const grab = (txt, name) => {
+    const m = txt.match(new RegExp('window\\.' + name + '\\s*=\\s*')); if (!m) return null;
+    const rest = txt.slice(m.index + m[0].length);
+    const nx = rest.search(/;\s*\n\s*window\./);
+    return JSON.parse((nx < 0 ? rest : rest.slice(0, nx)).replace(/;\s*$/, ''));
+  };
+  $('#file').addEventListener('change', async e => {
+    const add = [], names = []; let newMap = null;
+    for (const f of e.target.files) {
+      try {
+        const txt = (await f.text()).replace(/^\uFEFF/, '');
+        if (/window\.KDASH_/.test(txt)) { const d = grab(txt, 'KDASH_DATA'), m = grab(txt, 'KDASH_MAPPING'); if (d) add.push(...d); if (m) newMap = m; }
+        else { const o = JSON.parse(txt); if (Array.isArray(o)) add.push(...o.filter(d => d && d.buckets)); else if (o && o.buckets) add.push(o); else if (o && o.ops && o.rows) newMap = o; else throw new Error('不是数据集 / bundle / mapping'); }
+        names.push(f.name);
+      } catch (err) { alert(f.name + '：' + err.message); }
+    }
+    e.target.value = '';
+    if (!names.length) return;
+    if (newMap) setMap(newMap);
+    if (add.length) { if (DEMO) { DATA = []; DEMO = false; } DATA.push(...add); st.a = 0; st.b = ''; st.batch = null; }
+    $('#demo-banner').hidden = !DEMO;
+    $('#gen-note').textContent = `已载入本地文件 ${names.join('、')}：${DATA.length} 个数据集；mapping：${MAP.generated_from}`;
+    fillDatasets(); fillScope(); renderInfo(); render();
+  });
+  segc('#phase', 'phase', () => { st.batch = null; st.op = st.op; render(); });
+  segc('#stat', 'stat'); segc('#sx', 'sx', renderScaling); segc('#sy', 'sy', renderScaling); segc('#ss', 'ss', renderScaling);
+  if (DATA.length) { const firstPhase = bucketsOf(dsA(), 'decode').length ? 'decode' : 'prefill'; st.phase = firstPhase; st.op = 'ffn.moe_gemm1'; }
+  // deep link / testing: #a=0&b=1&phase=prefill&scope=kind:full1&op=attn.sparse_attn&sx=tk
+  const hp = new URLSearchParams(location.hash.slice(1));
+  if (hp.get('theme')) document.documentElement.dataset.theme = hp.get('theme');
+  if (hp.has('a')) st.a = +hp.get('a'); if (hp.has('b')) st.b = hp.get('b');
+  ['phase', 'scope', 'op', 'sx', 'sy', 'ss', 'stat'].forEach(k => { if (hp.has(k)) st[k] = hp.get(k); });
+  $('#ds-a').value = st.a; $('#ds-b').value = st.b; $('#scope').value = st.scope;
+  renderInfo(); render();
+  window.addEventListener('resize', () => renderScaling());
+}
+init();
+})();
+</script>
+</body>
+</html>

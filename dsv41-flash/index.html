@@ -1976,6 +1976,7 @@ python3 trace_to_opgraph.py rank0.pt.trace.json.gz \
     --step 'ATOM::forward tokens=2808 ' -o prefill.json</pre></li>
     <li>点上面的“加载数据”，可以同时选 decode 和 prefill 两个文件，用按钮切换。</li>
   </ol>
+  <p>更细的两个看板（页面框架，默认显示合成的示例数据，可在浏览器里加载本地数据文件查看）：<a href="dash/kernel/">kernel 看板</a>（按 batch / token / KV 长度看每个算子、每个 kernel 的 GPU 时间）、<a href="dash/sched/">调度看板</a>（CPU 时间线、DP 均衡、请求生命周期、prefill 放行、MoE 专家负载）。</p>
   <p>脚本怎么归类 kernel：</p>
   <ul>
     <li><b>选哪一步</b>：按 CPU 侧的 annotation（<code>--step</code> 是正则）找到这一步发起的所有 launch，再按 correlation id 找对应的 GPU kernel，graph replay 里的 kernel 也算在内。GPU 侧的 annotation 范围不可靠，会漏掉前面的层，所以不用。<code>--all</code> 对所有匹配的步取中位数。</li>

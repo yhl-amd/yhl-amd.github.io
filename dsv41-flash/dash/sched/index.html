@@ -1,0 +1,1025 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSV4.1-Flash · ATOM 调度看板（页面框架 · 示例数据）</title>
+<style>
+/* 视觉沿用 yhl-amd.github.io/dsv41-flash 的变量与字体栈；离线可用，不引外部字体 */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --sunk:#eaecf0; --ink:#18202b; --muted:#596373; --rule:#d7dbe2;
+  --csa:#2f4dbf; --swa:#0f7a60; --sink:#86479f; --rope:#c34a1f; --hca:#a86a0c;
+  --csa-soft:#e0e6f9; --swa-soft:#d6eee6; --rope-soft:#fae1d6; --hca-soft:#f5e7cf;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
+  --pf:#c34a1f; --dc:#2f4dbf; --dummy:#a2a9b5; --idle:#eaecf0; --draft:#86479f; --gap:#eda100;
+  --font-display:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --font-body:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono","SFMono-Regular",Menlo,Consolas,"Microsoft YaHei",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11151b; --surface:#181e27; --sunk:#0c1015; --ink:#e3e7ee; --muted:#98a2b2; --rule:#2a323d;
+    --csa:#8aa0f3; --swa:#4cc3a0; --sink:#c78ce0; --rope:#f08c60; --hca:#e0a24a;
+    --csa-soft:#1e2849; --swa-soft:#123830; --rope-soft:#3d2216; --hca-soft:#3a2b13;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    --pf:#f08c60; --dc:#8aa0f3; --dummy:#5d6675; --idle:#232a35; --draft:#c78ce0; --gap:#c98500;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11151b; --surface:#181e27; --sunk:#0c1015; --ink:#e3e7ee; --muted:#98a2b2; --rule:#2a323d;
+  --csa:#8aa0f3; --swa:#4cc3a0; --sink:#c78ce0; --rope:#f08c60; --hca:#e0a24a;
+  --csa-soft:#1e2849; --swa-soft:#123830; --rope-soft:#3d2216; --hca-soft:#3a2b13;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+  --pf:#f08c60; --dc:#8aa0f3; --dummy:#5d6675; --idle:#232a35; --draft:#c78ce0; --gap:#c98500;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 var(--font-body)}
+header.top{position:sticky;top:0;z-index:10;background:var(--surface);border-bottom:1px solid var(--rule);padding:.55rem 1.2rem;display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:center}
+header.top h1{font:900 18px/1.2 var(--font-display);margin:0 1rem 0 0}
+header.top label{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:.35rem}
+select,button,input{font:inherit;font-size:12.5px;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:2px 6px}
+button{cursor:pointer}
+button.on{background:var(--csa);color:#fff;border-color:var(--csa)}
+.wrap{max-width:1400px;margin:0 auto;padding:1rem 1.2rem 4rem}
+nav.toc{display:flex;flex-wrap:wrap;gap:.3rem .9rem;font-size:12.5px;margin:.2rem 0 1rem}
+nav.toc a{color:var(--csa);text-decoration:none}
+section.sec{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:1rem 1.2rem 1.2rem;margin:0 0 1.1rem}
+section.sec h2{font:600 17px/1.3 var(--font-display);margin:0 0 .25rem}
+section.sec h3{font-size:14px;margin:1rem 0 .35rem}
+.gist{color:var(--muted);font-size:13px;margin:.1rem 0 .7rem}
+.src{font-size:11.5px;color:var(--muted);border-left:3px solid var(--rule);padding-left:.5rem;margin:.4rem 0}
+.pending{border:1px dashed var(--muted);border-radius:6px;padding:.7rem .9rem;color:var(--muted);background:var(--sunk);font-size:13px}
+.pending b{color:var(--ink)}
+.pending code,.src code{font-family:var(--font-mono);font-size:11.5px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.55rem}
+.tile{border:1px solid var(--rule);border-radius:6px;padding:.45rem .6rem;background:var(--bg)}
+.tile .v{font:600 20px/1.2 var(--font-mono)}
+.tile .k{font-size:11.5px;color:var(--muted)}
+.tile .d{font-size:11.5px;font-family:var(--font-mono)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
+@media (max-width:1000px){.grid2,.grid3{grid-template-columns:1fr}}
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;overflow:visible}
+.ctitle{font-size:12.5px;font-weight:600;margin:.2rem 0 .1rem}
+.ctitle small{font-weight:400;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:.25rem .8rem;font-size:11.5px;color:var(--muted);margin:.1rem 0 .2rem}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:4px}
+.legend i.box{height:10px;width:10px}
+.legend i.dash{background:none!important;border-top:2px dashed currentColor;height:0}
+.axis text{fill:var(--muted);font-size:10.5px;font-family:var(--font-mono)}
+.axis line,.axis path{stroke:var(--rule)}
+.gridl{stroke:var(--rule);stroke-width:.6;opacity:.7}
+.tip{position:fixed;z-index:50;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:.4rem .55rem;font-size:12px;line-height:1.45;box-shadow:0 6px 20px rgb(0 0 0/.16);max-width:460px}
+.tip b{font-weight:600}
+.tip .m{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+table.t{border-collapse:collapse;width:100%;font-size:12.5px}
+table.t th,table.t td{border-bottom:1px solid var(--rule);padding:3px 6px;text-align:right;white-space:nowrap}
+table.t th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--surface)}
+table.t td:first-child,table.t th:first-child{text-align:left}
+.tbl{max-height:420px;overflow:auto;border:1px solid var(--rule);border-radius:6px}
+.brushhint{font-size:11.5px;color:var(--muted)}
+.lanes{position:relative;overflow:hidden;border:1px solid var(--rule);border-radius:6px;background:var(--bg)}
+.ctl{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;font-size:12.5px;margin:.2rem 0 .5rem}
+.warn{color:var(--rope)}
+.mono{font-family:var(--font-mono)}
+.ab{font-size:11px;padding:0 4px;border-radius:3px;background:var(--sunk);color:var(--muted);margin-left:4px}
+.demo{border:2px solid var(--rope);background:var(--rope-soft);color:var(--ink);border-radius:8px;padding:.6rem .9rem;margin:0 0 1rem;font-size:13.5px}
+.demo b.big{font-size:16px;color:var(--rope)}
+.ldbtn{font-size:12.5px;color:var(--ink);border:1px solid var(--csa);border-radius:5px;padding:2px 8px;cursor:pointer;background:var(--csa-soft)}
+#loadMsg{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>DSV4.1-Flash · ATOM 调度看板</h1>
+  <label>运行 A <select id="selA"></select></label>
+  <label>对比 B <select id="selB"><option value="">（无）</option></select></label>
+  <label>rank <span id="rankBtns"></span></label>
+  <label>时间窗 <span id="winTxt" class="mono">全程</span> <button id="winReset">重置</button></label>
+  <label><button id="theme">深/浅色</button></label>
+  <label class="ldbtn" title="在浏览器本地读取文件，数据不会上传">加载数据文件<input type="file" id="fileIn" accept=".js,.json" multiple hidden></label><span id="loadMsg"></span>
+</header>
+<div class="wrap">
+<div class="demo" id="demoBanner"><b class="big">示例数据（合成），非真实测量。</b> 页面里的所有数字都由随机数和简单模型生成，只用来展示看板的结构和交互，不代表任何硬件或软件的性能。点右上角“<b>加载数据文件</b>”可以选择本机的 <code>sched_data.js</code>（<code>build_sched_data.py</code> 的输出）或 <code>--runs-json</code> 导出的 JSON，在浏览器里直接查看；文件只在本地读取，不会上传。</div>
+<nav class="toc">
+  <a href="#s-sum">概况</a><a href="#s-cpu">CPU 时间线</a><a href="#s-tl">步时间线（trace）</a><a href="#s-dp">DP 均衡</a><a href="#s-load">请求负载</a>
+  <a href="#s-life">请求生命周期</a><a href="#s-admit">prefill 放行</a><a href="#s-moe">MoE 专家</a><a href="#s-spec">DSpark</a><a href="#s-step">逐步分解（hook）</a><a href="#s-src">数据来源</a>
+</nav>
+
+<section class="sec" id="s-sum">
+  <h2>概况</h2>
+  <p class="gist">A 的关键指标；选了 B 时下面一行是 B 相对 A 的变化。表格是全部运行（不同并发档）的横向对比。</p>
+  <div class="tiles" id="tiles"></div>
+  <h3>全部运行</h3>
+  <div class="tbl" id="runTable"></div>
+</section>
+
+<section class="sec" id="s-cpu">
+  <h2>CPU 时间线（只用 CPU 埋点，不开 profiler）</h2>
+  <p class="gist"><b class="warn">CPU 视角：阻塞时长 = GPU 未就绪（host 在等），未直接测 GPU。</b>数据来自 <code>sched/hook/atom_dash_spans.py</code>（<code>ATOM_DASH_SPANS=1</code>），可跑满 10 分钟压测。泳道 = 进程 / rank：每个引擎拍、每次 worker 前向画成一格，格内按阶段堆叠；在概览条上拖动缩放。逐 span 细节用 <code>spans_to_trace.py</code> 导出到 ui.perfetto.dev。</p>
+  <div id="cpuBody"></div>
+</section>
+
+<section class="sec" id="s-tl">
+  <h2>步时间线（torch profiler 窗口）</h2>
+  <p class="gist">每个 DP rank 一行：上半格是 CPU 侧一次 <code>ATOM::forward</code>（含 prepare 等待），下半格是 GPU 侧模型前向区间（decode/prefill 注解）与 DSpark 草稿区间；两步之间的空白就是引擎核（调度、DP 同步、IPC、输出处理）占的非前向时间。在上方概览条上拖动选择时间窗。</p>
+  <div id="tlBody"></div>
+</section>
+
+<section class="sec" id="s-dp">
+  <h2>DP 均衡</h2>
+  <p class="gist">DP attention + EP MoE 下各 rank 每步都要在 MoE 集合通信处对齐，步长由最慢 rank 决定。上：trace 窗口里逐步的 token 不均衡（max/mean）、GPU 起步时差、估算的不均衡损失；下：整段压测里路由到各 rank 的请求、在途请求与排队 prefill token。</p>
+  <div id="dpBody"></div>
+</section>
+
+<section class="sec" id="s-load">
+  <h2>请求负载（整段压测）</h2>
+  <p class="gist">横轴是发压后秒数（悬停显示北京时间）。在任一折线图上拖动可设全局时间窗，所有图同步。</p>
+  <div id="loadBody"></div>
+</section>
+
+<section class="sec" id="s-life">
+  <h2>请求生命周期</h2>
+  <p class="gist">客户端（压测工具）统计的 TTFT / TPOT / 端到端时延 / ISL / OSL 分布；服务端逐请求的 排队→首次调度→首 token→完成 由 hook 采集。</p>
+  <div id="lifeBody"></div>
+</section>
+
+<section class="sec" id="s-admit">
+  <h2>prefill 放行（PrefillDelayer / adaptive）</h2>
+  <p class="gist">日志里每 1000 次决策打一行累计统计，这里转成每个区间的放行原因构成与 hold 比例；adaptive 的 T0/A 拟合值随时间变化。逐次决策（原因、hold 了几拍、全局待放行 token、哪些 rank 缺 prefill）来自 hook。</p>
+  <div id="admitBody"></div>
+</section>
+
+<section class="sec" id="s-moe">
+  <h2>MoE 专家负载</h2>
+  <p class="gist">层 × 专家的 token 计数热力图、每个 EP rank 收到的 token（dispatch 负载）、负载不均系数（max/mean）随时间变化。</p>
+  <div id="moeBody"></div>
+</section>
+
+<section class="sec" id="s-spec">
+  <h2>DSpark 投机解码</h2>
+  <p class="gist">日志 <code>[MTP Stats Interval]</code>（每 rank 每 1000 次验证一行）汇总的接受长度分布与接受率；trace 里每步草稿宽度。</p>
+  <div id="specBody"></div>
+</section>
+
+<section class="sec" id="s-step">
+  <h2>引擎核逐步分解（hook）</h2>
+  <p class="gist">每个 DP rank 的引擎核每一拍：DP 状态同步（gloo all_reduce=对齐屏障）、调度（含 delayer 的 all_reduce）、前向（含等待输出）、输出处理、其它；以及 running / waiting / KV 使用率。</p>
+  <div id="stepBody"></div>
+</section>
+
+<section class="sec" id="s-src">
+  <h2>数据来源与口径</h2>
+  <div id="srcBody"></div>
+</section>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<div id="errs" hidden></div>
+<script>
+/* collect JS errors into #errs (used by the headless self-check; also visible via devtools) */
+(function(){const box=document.getElementById('errs');const add=m=>{box.hidden=false;box.className='pending warn';box.textContent+=' [JS错误] '+m;};
+addEventListener('error',e=>add(e.message+' @'+(e.lineno||'')));const ce=console.error;console.error=(...a)=>{add(a.map(x=>x&&x.stack||String(x)).join(' '));ce(...a);};})();
+</script>
+<script src="data/sched_demo.js"></script>
+<script>
+"use strict";
+let D = window.SCHED_DATA || {runs: []};
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, attrs, ...kids) => { const e = document.createElement(tag); if (attrs) for (const k in attrs) { if (k === 'class') e.className = attrs[k]; else if (k === 'html') e.innerHTML = attrs[k]; else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]); else e.setAttribute(k, attrs[k]); } for (const c of kids) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c)); return e; };
+const SVGNS = 'http://www.w3.org/2000/svg';
+const sv = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag); if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const RANKC = ['--s1', '--s2', '--s3', '--s4', '--s5', '--s6', '--s7', '--s8'];
+const rc = r => `var(${RANKC[r % 8]})`;
+const fmt = (v, d = 1) => v == null || Number.isNaN(v) ? '–' : (Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : Math.abs(v) >= 1e4 ? (v / 1e3).toFixed(1) + 'k' : (+v).toFixed(d));
+const bjt = ep => ep == null ? '–' : new Date((ep + 8 * 3600) * 1000).toISOString().slice(11, 19);
+const bjtFull = ep => ep == null ? '–' : new Date((ep + 8 * 3600) * 1000).toISOString().slice(0, 19).replace('T', ' ');
+const median = a => { const b = a.filter(x => x != null && !Number.isNaN(x)).sort((x, y) => x - y); if (!b.length) return null; const m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+const mean = a => { const b = a.filter(x => x != null && !Number.isNaN(x)); return b.length ? b.reduce((s, x) => s + x, 0) / b.length : null; };
+const sum = a => a.reduce((s, x) => s + (x || 0), 0);
+const pend = (title, how) => el('div', {class: 'pending', html: `<b>待采集：</b>${title}${how ? '<br>' + how : ''}`});
+
+/* ---------------- state ---------------- */
+const S = {A: null, B: null, ranks: null, win: null};   // win = [x0, x1] seconds since load start
+const _baseT = new WeakMap();
+function baseT(run) {
+  if (_baseT.has(run)) return _baseT.get(run);
+  const v = baseT0(run); _baseT.set(run, v); return v;
+}
+function baseT0(run) {
+  const rq = run.log && run.log.requests;
+  if (rq && rq.length) { const t = rq.map(r => r[0]).sort((a, b) => a - b); return t[Math.min(5, t.length - 1)]; }
+  if (run.prom && run.prom.length) return run.prom[0].t;
+  const hs = run.hook && run.hook.steps; if (hs) { const t = Object.values(hs).map(r => r[0] && r[0][0]).filter(Boolean); if (t.length) return Math.min(...t); }
+  const hd = run.hook && run.hook.delayer; if (hd && hd.length) return hd[0][0];
+  if (run.cpu && run.cpu.t0_epoch) return run.cpu.t0_epoch;
+  if (run.trace && run.trace.t0_epoch) return run.trace.t0_epoch;
+  return 0;
+}
+function phaseBands(run, toX) {
+  const P = run.phases && run.phases.phases; if (!P) return [];
+  const out = [];
+  if (P.warmup_start && P.warmup_end) out.push([toX(P.warmup_start), toX(P.warmup_end), css('--gap')]);
+  if (P.bench_start) out.push([toX(P.bench_start), toX(P.issue_end || P.drained || P.bench_start + 600), css('--swa')]);
+  if (P.prof_start) out.push([toX(P.prof_start), toX(P.prof_exported || P.prof_stop_req || P.prof_start + 60), css('--sink')]);
+  return out;
+}
+function phaseNote(run) {
+  const P = run.phases && run.phases.phases; if (!P) return '';
+  const f = (a, b) => P[a] ? `${bjt(P[a])}${P[b] ? '–' + bjt(P[b]) : ''}` : '–';
+  return `<b>窗口</b>（北京时间）：热身 ${f('warmup_start', 'warmup_end')}（橙底）· 正式 ${f('bench_start', 'issue_end')}（绿底）` + (P.prof_start ? ` · profiler ${f('prof_start', 'prof_exported')}（紫底，含导出）` : '');
+}
+function inWin(x) { return !S.win || (x >= S.win[0] && x <= S.win[1]); }
+
+/* ---------------- tooltip ---------------- */
+const tip = $('#tip');
+function showTip(ev, html) { tip.innerHTML = html; tip.hidden = false; const w = tip.offsetWidth, h = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 12; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 12; tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
+function hideTip() { tip.hidden = true; }
+
+/* ---------------- generic charts ---------------- */
+let DRAG_END = null;   // one global mouseup handler finishes whichever brush is active
+window.addEventListener('mouseup', e => { const f = DRAG_END; DRAG_END = null; if (f) f(e); });
+function niceTicks(lo, hi, n = 5) {
+  if (!(hi > lo)) { hi = lo + 1; }
+  const span = hi - lo, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= n + 1) || mag * 10;
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+/* lineChart: series [{name,color,dash,pts:[[x,y],...], step:false, width}] ; opts {h,xLabel,yLabel,yMin,yMax,xfmt,yfmt,tipX,brush,band:[[x0,x1,color]],area} */
+function lineChart(host, series, o = {}) {
+  const W = host.clientWidth || 600, H = o.h || 200, M = {l: 48, r: 12, t: 8, b: 28};
+  const all = series.flatMap(s => s.pts.filter(p => p[1] != null && !Number.isNaN(p[1])));
+  const svg = sv('svg', {viewBox: `0 0 ${W} ${H}`, height: H});
+  host.innerHTML = ''; host.append(svg);
+  if (!all.length) { host.append(el('div', {class: 'brushhint'}, '（此时间窗内无数据）')); return; }
+  let x0 = o.xMin ?? Math.min(...all.map(p => p[0])), x1 = o.xMax ?? Math.max(...all.map(p => p[0]));
+  if (x1 === x0) x1 = x0 + 1;
+  let y0 = o.yMin ?? Math.min(0, ...all.map(p => p[1])), y1 = o.yMax ?? Math.max(...all.map(p => p[1]));
+  if (y1 === y0) y1 = y0 + 1; y1 = y1 + (y1 - y0) * 0.05;
+  const X = x => M.l + (x - x0) / (x1 - x0) * (W - M.l - M.r), Y = y => H - M.b - (y - y0) / (y1 - y0) * (H - M.t - M.b);
+  const g = sv('g', {class: 'axis'}); svg.append(g);
+  for (const t of niceTicks(y0, y1, 4)) { g.append(sv('line', {x1: M.l, x2: W - M.r, y1: Y(t), y2: Y(t), class: 'gridl'})); const tx = sv('text', {x: M.l - 5, y: Y(t) + 3, 'text-anchor': 'end'}); tx.textContent = (o.yfmt || fmt)(t, t % 1 ? 2 : 0); g.append(tx); }
+  for (const t of niceTicks(x0, x1, Math.max(3, Math.floor(W / 110)))) { const tx = sv('text', {x: X(t), y: H - M.b + 14, 'text-anchor': 'middle'}); tx.textContent = (o.xfmt || (v => fmt(v, x1 - x0 < 10 ? 2 : 0)))(t); g.append(tx); }
+  g.append(sv('line', {x1: M.l, x2: W - M.r, y1: H - M.b, y2: H - M.b}));
+  if (o.xLabel) { const tx = sv('text', {x: W - M.r, y: H - 2, 'text-anchor': 'end'}); tx.textContent = o.xLabel; g.append(tx); }
+  if (o.yLabel) { const tx = sv('text', {x: 2, y: M.t + 2, 'text-anchor': 'start', 'dominant-baseline': 'hanging'}); tx.textContent = o.yLabel; g.append(tx); }
+  for (const b of (o.band || [])) svg.append(sv('rect', {x: X(Math.max(b[0], x0)), y: M.t, width: Math.max(1, X(Math.min(b[1], x1)) - X(Math.max(b[0], x0))), height: H - M.t - M.b, fill: b[2], opacity: .18}));
+  for (const s of series) {
+    const pts = s.pts.filter(p => p[1] != null && !Number.isNaN(p[1]) && p[0] >= x0 && p[0] <= x1);
+    if (!pts.length) continue;
+    if (s.dots) { for (const p of pts) svg.append(sv('circle', {cx: X(p[0]), cy: Y(p[1]), r: s.r || 2.2, fill: s.color, opacity: s.opacity ?? .75})); continue; }
+    let d = '';
+    pts.forEach((p, i) => { if (s.step && i) d += `H${X(p[0]).toFixed(1)}`; d += (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ',' + Y(p[1]).toFixed(1); });
+    if (s.area) svg.append(sv('path', {d: d + `L${X(pts.at(-1)[0])},${Y(y0)}L${X(pts[0][0])},${Y(y0)}Z`, fill: s.color, opacity: .12}));
+    svg.append(sv('path', {d, fill: 'none', stroke: s.color, 'stroke-width': s.width || 1.6, 'stroke-dasharray': s.dash ? '5 3' : '', 'stroke-linejoin': 'round'}));
+  }
+  // hover crosshair + brush
+  const ov = sv('rect', {x: M.l, y: M.t, width: W - M.l - M.r, height: H - M.t - M.b, fill: 'transparent', style: 'cursor:crosshair'});
+  const cross = sv('line', {y1: M.t, y2: H - M.b, stroke: css('--muted'), 'stroke-width': 1, visibility: 'hidden'});
+  const br = sv('rect', {y: M.t, height: H - M.t - M.b, fill: css('--csa'), opacity: .15, visibility: 'hidden'});
+  svg.append(br, cross, ov);
+  const inv = px => x0 + (px - M.l) / (W - M.l - M.r) * (x1 - x0);
+  const sx = e => { const r = svg.getBoundingClientRect(); return (e.clientX - r.left) * W / r.width; };
+  let drag = null;
+  ov.addEventListener('mousemove', e => {
+    const px = sx(e), x = inv(px);
+    cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
+    if (drag != null) { br.setAttribute('x', Math.min(drag, px)); br.setAttribute('width', Math.abs(px - drag)); br.setAttribute('visibility', 'visible'); }
+    const rows = series.filter(s => !s.noTip).map(s => { let best = null, bd = Infinity; for (const p of s.pts) { const dd = Math.abs(p[0] - x); if (dd < bd && p[1] != null) { bd = dd; best = p; } } return best ? `<span style="color:${s.color}">■</span> ${s.name}: <b>${(o.yfmt || fmt)(best[1], 2)}</b>${best[2] ? ' <span class=m>' + best[2] + '</span>' : ''}` : null; }).filter(Boolean);
+    showTip(e, `<div class=m>${o.tipX ? o.tipX(x) : fmt(x, 1)}</div>` + rows.join('<br>'));
+  });
+  ov.addEventListener('mouseleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+  if (o.brush) {
+    ov.addEventListener('mousedown', e => {
+      drag = sx(e); e.preventDefault();
+      DRAG_END = ev => { const a = inv(drag), b = inv(sx(ev)); drag = null; br.setAttribute('visibility', 'hidden'); if (Math.abs(b - a) > (x1 - x0) / 200) o.brush(Math.min(a, b), Math.max(a, b)); };
+    });
+  }
+}
+function legend(host, items) { const lg = el('div', {class: 'legend'}); for (const it of items) lg.append(el('span', null, el('i', {class: (it.box ? 'box' : '') + (it.dash ? ' dash' : ''), style: `background:${it.color};color:${it.color}`}), it.name)); host.append(lg); return lg; }
+function chartBox(host, title, sub) { const box = el('div'); box.append(el('div', {class: 'ctitle', html: title + (sub ? ` <small>${sub}</small>` : '')})); const c = el('div', {class: 'chart'}); box.append(c); host.append(box); return {box, c}; }
+/* bars: cats [labels], series [{name,color,vals}] stacked=true|false ; histogram uses cats as bin labels */
+function barChart(host, cats, series, o = {}) {
+  const W = host.clientWidth || 600, H = o.h || 180, M = {l: 48, r: 10, t: 8, b: o.rot ? 46 : 28};
+  const svg = sv('svg', {viewBox: `0 0 ${W} ${H}`, height: H}); host.innerHTML = ''; host.append(svg);
+  const n = cats.length; if (!n) return;
+  const tot = cats.map((_, i) => o.stacked ? sum(series.map(s => s.vals[i])) : Math.max(...series.map(s => s.vals[i] || 0)));
+  const y1 = (o.yMax ?? Math.max(...tot, 1e-9)) * 1.05;
+  const bw = (W - M.l - M.r) / n, Y = v => H - M.b - v / y1 * (H - M.t - M.b);
+  const g = sv('g', {class: 'axis'}); svg.append(g);
+  for (const t of niceTicks(0, y1, 4)) { g.append(sv('line', {x1: M.l, x2: W - M.r, y1: Y(t), y2: Y(t), class: 'gridl'})); const tx = sv('text', {x: M.l - 5, y: Y(t) + 3, 'text-anchor': 'end'}); tx.textContent = (o.yfmt || fmt)(t, t % 1 ? 2 : 0); g.append(tx); }
+  const every = Math.ceil(n / Math.max(1, Math.floor((W - M.l) / (o.rot ? 18 : 46))));
+  cats.forEach((c, i) => { if (i % every) return; const x = M.l + bw * (i + .5); const tx = sv('text', o.rot ? {x, y: H - M.b + 10, 'text-anchor': 'end', transform: `rotate(-45 ${x} ${H - M.b + 10})`} : {x, y: H - M.b + 14, 'text-anchor': 'middle'}); tx.textContent = c; g.append(tx); });
+  if (o.yLabel) { const tx = sv('text', {x: 2, y: M.t + 2, 'dominant-baseline': 'hanging'}); tx.textContent = o.yLabel; g.append(tx); }
+  const ns = series.length, gap = Math.min(2, bw * .15);
+  cats.forEach((c, i) => {
+    let acc = 0;
+    series.forEach((s, j) => {
+      const v = s.vals[i] || 0; if (!v) return;
+      let x, w, y, h;
+      if (o.stacked) { x = M.l + bw * i + gap; w = bw - 2 * gap; y = Y(acc + v); h = Y(acc) - Y(acc + v); acc += v; }
+      else { w = (bw - 2 * gap) / ns; x = M.l + bw * i + gap + w * j; y = Y(v); h = Y(0) - Y(v); }
+      const r = sv('rect', {x, y, width: Math.max(.5, w - (o.stacked ? 0 : 1)), height: Math.max(0, h - (o.stacked ? 1 : 0)), fill: s.color, rx: Math.min(2, w / 4), opacity: s.opacity ?? 1});
+      r.addEventListener('mousemove', e => showTip(e, `<b>${c}</b><br>` + series.map(ss => `<span style="color:${ss.color}">■</span> ${ss.name}: <b>${(o.vfmt || fmt)(ss.vals[i], 2)}</b>`).join('<br>') + (o.stacked ? `<br><span class=m>合计 ${(o.vfmt || fmt)(tot[i], 2)}</span>` : '') + (o.extra ? o.extra(i) : '')));
+      r.addEventListener('mouseleave', hideTip);
+      svg.append(r);
+    });
+  });
+  g.append(sv('line', {x1: M.l, x2: W - M.r, y1: Y(0), y2: Y(0)}));
+}
+function heatmap(host, mat, o = {}) {
+  const rows = mat.length, cols = mat[0].length;
+  const W = host.clientWidth || 900, cw = (W - 60) / cols, ch = o.ch || Math.max(6, Math.min(14, 520 / rows)), H = rows * ch + 26;
+  const cv = el('canvas', {width: Math.round(W * devicePixelRatio), height: Math.round(H * devicePixelRatio), style: `width:${W}px;height:${H}px;display:block`});
+  host.innerHTML = ''; host.append(cv);
+  const ctx = cv.getContext('2d'); ctx.scale(devicePixelRatio, devicePixelRatio);
+  let mx = 0; for (const r of mat) for (const v of r) mx = Math.max(mx, o.norm ? v : v);
+  const base = o.color || [47, 77, 191];
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light' || document.documentElement.dataset.theme === 'dark';
+  for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
+    const v = mat[i][j], f = mx ? v / mx : 0;
+    const bg = dark ? [24, 30, 39] : [255, 255, 255];
+    ctx.fillStyle = `rgb(${bg.map((b, k) => Math.round(b + (base[k] - b) * Math.pow(f, .6))).join(',')})`;
+    ctx.fillRect(60 + j * cw, i * ch, Math.max(cw - .3, .6), ch - .5);
+  }
+  ctx.fillStyle = css('--muted'); ctx.font = '10px ' + css('--font-mono');
+  for (let i = 0; i < rows; i++) if (rows < 50 || i % 2 === 0) ctx.fillText(o.rowLabel ? o.rowLabel(i) : String(i), 2, i * ch + ch - 2);
+  for (let j = 0; j < cols; j += Math.ceil(cols / 12)) ctx.fillText(String(j), 60 + j * cw, rows * ch + 12);
+  if (o.colBands) for (const [a, b, lab] of o.colBands) { ctx.fillStyle = css('--muted'); ctx.fillRect(60 + a * cw, rows * ch + 16, (b - a) * cw - 2, 2); ctx.fillText(lab, 60 + a * cw, rows * ch + 25); }
+  cv.addEventListener('mousemove', e => { const r = cv.getBoundingClientRect(); const j = Math.floor((e.clientX - r.left - 60) / cw), i = Math.floor((e.clientY - r.top) / ch); if (i >= 0 && i < rows && j >= 0 && j < cols) showTip(e, o.tip ? o.tip(i, j, mat[i][j], mx) : `${i},${j}: ${mat[i][j]}`); else hideTip(); });
+  cv.addEventListener('mouseleave', hideTip);
+}
+function table(host, head, rows, o = {}) {
+  const t = el('table', {class: 't'}); const tr = el('tr'); head.forEach(h => tr.append(el('th', {html: h}))); t.append(el('thead', null, tr));
+  const tb = el('tbody'); rows.forEach(r => { const x = el('tr'); r.forEach(c => x.append(el('td', {html: c == null ? '–' : String(c)}))); tb.append(x); }); t.append(tb);
+  const box = el('div', {class: 'tbl'}, t); if (o.maxH) box.style.maxHeight = o.maxH; host.append(box);
+}
+
+/* ---------------- selectors ---------------- */
+function runs() { return D.runs; }
+function R(id) { return D.runs.find(r => r.id === id); }
+function nRanks(run) {
+  if (run.trace) return run.trace.ranks.length;
+  if (run.cpu) return Math.max(Object.keys(run.cpu.engines).length, Object.keys(run.cpu.runners).length, 1);
+  const e = run.log && run.log.engine; if (e && Object.keys(e).length) return Object.keys(e).length;
+  const v = run.log && run.log.inflight && run.log.inflight[0]; return v ? v[1].length : 1;
+}
+function setupHeader() {
+  const sa = $('#selA'), sb = $('#selB');
+  sa.innerHTML = ''; sb.innerHTML = '<option value="">（无）</option>';
+  $('#demoBanner').hidden = !D.demo;
+  for (const r of runs()) { sa.append(el('option', {value: r.id}, r.meta.label)); sb.append(el('option', {value: r.id}, r.meta.label)); }
+  const q = new URLSearchParams(location.hash.slice(1));
+  sa.value = q.get('a') || runs()[0]?.id || ''; sb.value = q.get('b') || '';
+  if (!sa.value && runs().length) sa.value = runs()[0].id;
+  sa.onchange = sb.onchange = () => { location.hash = `a=${sa.value}&b=${sb.value}`; S.win = null; renderAll(); };
+  $('#winReset').onclick = () => { S.win = null; renderAll(); };
+  $('#fileIn').onchange = e => { loadFiles([...e.target.files]); e.target.value = ''; };
+  $('#theme').onclick = () => { const r = document.documentElement; const cur = r.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); r.dataset.theme = cur === 'dark' ? 'light' : 'dark'; renderAll(); };
+}
+function rankButtons(n) {
+  const host = $('#rankBtns'); host.innerHTML = '';
+  if (!S.ranks || S.ranks.length !== n) S.ranks = Array(n).fill(true);
+  for (let i = 0; i < n; i++) { const b = el('button', {class: S.ranks[i] ? 'on' : '', style: S.ranks[i] ? `background:${rc(i)};border-color:${rc(i)}` : ''}, String(i)); b.onclick = () => { S.ranks[i] = !S.ranks[i]; renderAll(); }; host.append(b); }
+}
+const setWin = (a, b) => { S.win = [a, b]; renderAll(); };
+/* local file loader: sched_data.js (window.SCHED_DATA = {...};), {runs:[...]} JSON, a --runs-json list, or one run object.
+   Files are read with FileReader in the browser; nothing is uploaded. Loading replaces the demo data. */
+function parseSchedText(txt) {
+  let t = txt.replace(/^\uFEFF/, '').trim();
+  const m = t.match(/window\.SCHED_DATA\s*=\s*/);
+  if (m) t = t.slice(m.index + m[0].length).replace(/;\s*$/, '');
+  const o = JSON.parse(t);
+  if (Array.isArray(o)) return {runs: o};
+  if (o && Array.isArray(o.runs)) return o;
+  if (o && o.meta) return {runs: [o]};
+  throw new Error('不是看板数据（需要 window.SCHED_DATA / {runs:[…]} / run 列表）');
+}
+async function loadFiles(files) {
+  const msg = $('#loadMsg'); const got = []; let gen = null; const names = [];
+  for (const f of files) {
+    try { msg.textContent = `读取 ${f.name} …`; const d = parseSchedText(await f.text()); got.push(...d.runs); gen = gen || d.generated_bjt; names.push(f.name); }
+    catch (e) { alert(f.name + '：' + e.message); }
+  }
+  if (!got.length) { msg.textContent = ''; return; }
+  const seen = new Set();
+  for (const r of got) { r.id = r.id || (r.meta && r.meta.label) || 'run'; let id = r.id, i = 2; while (seen.has(id)) id = r.id + '_' + i++; r.id = id; seen.add(id); }
+  D = {generated_bjt: gen || '–', runs: got, demo: false, files: names};
+  S.win = null; S.ranks = null; S.cpuWin = null; S.tlWin = null; S.cpuRun = null;
+  history.replaceState(null, '', location.pathname + location.search);
+  setupHeader(); renderAll();
+  msg.textContent = `已载入本地文件 ${names.join('、')}（${got.length} 个运行）`;
+}
+
+/* ---------------- sections ---------------- */
+const SUMK = [
+  ['gen_tok_s_gpu(issue600)', '生成 tok/s/GPU（发压 600 s）', 0], ['gen_tok_s_gpu(steady480)', '生成 tok/s/GPU（稳态 480 s）', 0],
+  ['TTFT_p50_ms', 'TTFT p50 ms', 0], ['TTFT_p99_ms', 'TTFT p99 ms', 0], ['queue_p50_ms', '排队 p50 ms', 0],
+  ['MTP_accept%', 'DSpark 接受率 %', 2], ['running_avg', 'running 均值', 0], ['waiting_avg', 'waiting 均值', 1],
+  ['dc_ms/step', 'decode 每步墙钟 ms', 2], ['dc_fwd_ms', 'decode 每步前向 ms', 2], ['dc_reqs/step', 'decode 每步请求数', 1],
+  ['pf_ms/step', 'prefill 每步墙钟 ms', 1], ['pf_toks/step', 'prefill 每步 token', 0], ['pf_wall_frac', 'prefill 占墙钟', 3],
+  ['finished_reqs', '完成请求数', 0], ['preemptions', '抢占次数', 0]];
+function renderSummary(A, B) {
+  const host = $('#tiles'); host.innerHTML = '';
+  const s = A.summary || {};
+  if (!A.summary) host.append(pend('该运行没有 summary.txt'));
+  for (const [k, lab, d] of SUMK) {
+    if (s[k] == null) continue;
+    const t = el('div', {class: 'tile'}, el('div', {class: 'v'}, fmt(s[k], d)), el('div', {class: 'k'}, lab));
+    if (B && B.summary && B.summary[k] != null) { const dv = B.summary[k] - s[k], pct = s[k] ? dv / s[k] * 100 : 0; t.append(el('div', {class: 'd', style: `color:var(--muted)`}, `B ${fmt(B.summary[k], d)} (${dv >= 0 ? '+' : ''}${pct.toFixed(1)}%)`)); }
+    host.append(t);
+  }
+  // non-forward overhead tile (decode): from summary
+  if (s['dc_ms/step'] != null && s['dc_fwd_ms'] != null) host.append(el('div', {class: 'tile'}, el('div', {class: 'v'}, fmt(s['dc_ms/step'] - s['dc_fwd_ms'], 2)), el('div', {class: 'k'}, 'decode 每步非前向 ms（墙钟−前向）')));
+  const rt = $('#runTable'); rt.innerHTML = '';
+  const head = ['运行', '并发', '机器', 'tok/s/GPU', 'TTFT p50/p99', 'accept%', 'running', 'dc 墙钟/前向 ms', 'pf ms/步 · 占比', 'trace', 'hook', '日志日期(UTC)'];
+  table(rt, head, runs().map(r => { const m = r.meta, q = r.summary || {}; return [`<b>${m.label}</b>`, m.concurrency ?? '–', m.machine || '–', fmt(q['gen_tok_s_gpu(issue600)'], 0), `${fmt(q.TTFT_p50_ms, 0)} / ${fmt(q.TTFT_p99_ms, 0)}`, fmt(q['MTP_accept%'], 2), fmt(q.running_avg, 0), `${fmt(q['dc_ms/step'], 2)} / ${fmt(q.dc_fwd_ms, 2)}`, `${fmt(q['pf_ms/step'], 1)} · ${fmt(q.pf_wall_frac, 3)}`, r.trace ? '有' : '–', r.hook ? '有' : '–', m.date_log || '–']; }), {maxH: '260px'});
+}
+
+
+/* ---------------- CPU span timeline ---------------- */
+const ECAT = [['dp_sync', 'DP 状态同步', '--s7'], ['gloo', 'gloo 集合通信', '--s5'], ['admit', '放行决策', '--s4'], ['schedule', '调度', '--s6'], ['wait_worker', '等 worker 前向', '--dc'], ['dummy', 'dummy', '--dummy'], ['post', '输出处理', '--s3'], ['inputs', '收请求', '--s1'], ['gc', 'GC', '--s8'], ['other', '其它', '--muted']];
+const RCAT = [['gpu_wait', '等 GPU（阻塞）', '--gap'], ['dp_sync', 'DP 同步(decide/gloo)', '--s7'], ['prepare', '准备输入', '--s6'], ['launch', '发射(run_model)', '--dc'], ['sample_post', '采样/后处理', '--s3'], ['draft', 'DSpark', '--draft'], ['gc', 'GC', '--s8'], ['other', '其它', '--muted']];
+function renderCPU(A, B) {
+  const host = $('#cpuBody'); host.innerHTML = '';
+  const X = A.cpu;
+  if (!X) {
+    host.append(pend('CPU span 时间线',
+      '用 <code>ATOM_DASH_DIR=…/dash ATOM_DASH_SPANS=1</code> 起服务采集 CPU span。不需要 torch profiler，开销约每步几十个时间戳。'));
+    return;
+  }
+  const EC = Object.fromEntries(X.engine_cols.map((c, i) => [c, i])), RC_ = Object.fromEntries(X.runner_cols.map((c, i) => [c, i]));
+  const ranks = [...new Set([...Object.keys(X.engines), ...Object.keys(X.runners)])].map(Number).sort((a, b) => a - b).filter(r => S.ranks[r] !== false);
+  host.append(el('div', {class: 'src', html: `零点 ${bjtFull(X.t0_epoch)}（北京时间）。进程：` + X.processes.map(p => `${p.role}${p.rank != null ? ' dp' + p.rank : ''}（pid ${p.pid}，${p.spans} span${p.lost ? '，<b class=warn>丢 ' + p.lost + '</b>' : ''}）`).join('；')}));
+  const tEnd = Math.max(...Object.values(X.engines).map(r => r.length ? r.at(-1)[EC.t_ms] + r.at(-1)[EC.dur] : 0), ...Object.values(X.runners).map(r => r.length ? r.at(-1)[RC_.t_ms] + r.at(-1)[RC_.dur] : 0));
+  const DW = X.detail_windows || null;
+  const SEC = !!X.engines_sec;
+  const SE = SEC ? Object.fromEntries(X.sec_engine_cols.map((c, i) => [c, i])) : null, SR = SEC ? Object.fromEntries(X.sec_runner_cols.map((c, i) => [c, i])) : null;
+  if (!S.cpuWin || S.cpuWin[1] > tEnd + 1 || S.cpuRun !== A.id) { S.cpuRun = A.id; 
+    let w = null;
+    const stl = ((A.phases && A.phases.stalls) || []).map(([t, d]) => (t + d - X.t0_epoch) * 1000).find(e => DW && DW.some(x => e > Math.max(0, x[0]) && e < x[1]));
+    if (stl != null) w = [stl - 600, stl + 600];                       // around the end of a stall
+    else if (DW) w = [Math.max(0, DW[0][0]) + 5000, Math.max(0, DW[0][0]) + 5600];
+    S.cpuWin = w || [tEnd / 2, Math.min(tEnd, tEnd / 2 + 400)]; }
+  if (DW) host.append(el('div', {class: 'src', html: '逐拍细节只保留了 ' + DW.map(w => `<b>${w[2]}</b>（+${(w[0] / 1000).toFixed(0)}–${(w[1] / 1000).toFixed(0)} s，${bjt(X.t0_epoch + w[0] / 1000)}–${bjt(X.t0_epoch + w[1] / 1000)}）`).join('、') + '（概览条上的浅蓝底）；其余时段只有按秒聚合（分解图、占比表照常覆盖全程）。全程逐 span 细节在 Perfetto 文件里（见“数据来源”）。'}));
+  const ov = chartBox(host, '概览：每秒平均引擎拍时长（ms）', '拖动选择下方泳道的时间窗');
+  legend(ov.box, ranks.map(r => ({name: 'engine dp' + r, color: rc(r)})));
+  const perSec = (rows, r) => { if (SEC && X.engines_sec[r]) return X.engines_sec[r].filter(x => x[SE.n]).map(x => [x[SE.t_ms], x[SE.dur] / x[SE.n]]); const m = {}; for (const x of rows) { const k = Math.floor(x[EC.t_ms] / 1000); (m[k] = m[k] || []).push(x[EC.dur]); } return Object.entries(m).map(([k, v]) => [+k * 1000, mean(v)]); };
+  const toMs = ep => (ep - X.t0_epoch) * 1000;
+  if (A.phases) ov.box.append(el('div', {class: 'src', html: phaseNote(A)}));
+  lineChart(ov.c, ranks.filter(r => X.engines[r]).map(r => ({name: 'dp' + r, color: rc(r), pts: perSec(X.engines[r], r)})), {h: 120, xfmt: v => (v / 1000).toFixed(0) + 's', tipX: v => `+${(v / 1000).toFixed(1)} s · ${bjt(X.t0_epoch + v / 1000)}`, band: phaseBands(A, toMs).concat((DW || []).map(w => [w[0], w[1], css('--s1')])).concat([[S.cpuWin[0], S.cpuWin[1], css('--csa')]]), brush: (a, b) => { S.cpuWin = [a, b]; renderCPU(A, B); }});
+  const stalls = (A.phases && A.phases.stalls) || [];
+  if (stalls.length) {
+    host.append(el('h3', null, `生成停顿（生成计数 ≥15 s 不变；${stalls.length} 次）`));
+    const rows = stalls.map(([t, dur]) => {
+      const a = toMs(t), b = a + dur * 1000;
+      const tally = (rows_, C, cats) => { const acc = {}; let n = 0; for (const x of rows_) { const x0 = x[C.t_ms], x1 = x0 + x[C.dur]; if (x1 < a || x0 > b) continue; n++; for (const [k] of cats) acc[k] = (acc[k] || 0) + (x[C[k]] || 0); } const top = Object.entries(acc).sort((p, q) => q[1] - p[1]).slice(0, 2); return n ? top.map(([k, v]) => `${(cats.find(c => c[0] === k) || [k, k])[1]} ${fmt(v / 1000, 1)}s`).join('，') + `（${n} 格）` : '无记录'; };
+      const tallySec = (rows_, C, cats) => { if (!rows_) return '无记录'; const acc = {}; let n = 0; for (const x of rows_) { const x0 = x[C.t_ms]; if (x0 + 1000 < a || x0 > b) continue; n += x[C.n]; for (const [k] of cats) acc[k] = (acc[k] || 0) + (x[C[k]] || 0); } const top = Object.entries(acc).sort((p, q) => q[1] - p[1]).slice(0, 2); return n ? top.map(([k, v]) => `${(cats.find(c => c[0] === k) || [k, k])[1]} ${fmt(v / 1000, 1)}s`).join('，') + `（按秒聚合，${n} 格）` : '无记录（hook 未开启）'; };
+      const pick = (fine, sec, C, SC, cats) => { const t = tally(fine, C, cats); return t !== '无记录' || !SEC ? t : tallySec(sec, SC, cats); };
+      const e = ranks.filter(r => X.engines[r]).map(r => `dp${r}: ${pick(X.engines[r], SEC && X.engines_sec[r], EC, SE, ECAT)}`).join('<br>');
+      const w = ranks.filter(r => X.runners[r]).map(r => `dp${r}: ${pick(X.runners[r], SEC && X.runners_sec[r], RC_, SR, RCAT)}`).join('<br>');
+      const ph = A.phases.phases || {};
+      const where = ph.bench_start && t >= ph.bench_start ? '正式' : ph.warmup_start && t >= ph.warmup_start ? '热身' : '启动后/热身前';
+      return [`${bjt(t)}<br><span class=m>+${fmt(a / 1000, 1)} s</span>`, where, fmt(dur, 0) + ' s', `<div style="text-align:left;font-size:11px">${e}</div>`, `<div style="text-align:left;font-size:11px">${w}</div>`];
+    });
+    table(host, ['开始（北京时间）', '段', '时长', '引擎核：停顿期间耗时最多的阶段', 'worker：停顿期间耗时最多的阶段'], rows, {maxH: '360px'});
+    host.append(el('div', {class: 'src', html: `停顿由压测脚本每 5 s 读 Prometheus 生成计数判定（≥20 s 时对所有 ATOM 进程做一次 py-spy dump：${(A.phases.stacks || []).length} 个文件，在 run 目录 stacks/）。点上表的时间，在概览条上拖选对应时间窗可在泳道里看具体卡在哪一格。`}));
+  }
+  const [w0, w1] = S.cpuWin;
+  if (DW && !DW.some(w => w0 < w[1] && w1 > w[0])) host.append(el('div', {class: 'pending', html: '所选时间窗不在逐拍细节窗口内：泳道为空。请在概览条的浅蓝底区间里拖选，或打开 Perfetto 文件看该时段。'}));
+  host.append(el('div', {class: 'ctitle', html: `泳道 <small>+${(w0 / 1000).toFixed(3)}–${(w1 / 1000).toFixed(3)} s（${(w1 - w0).toFixed(0)} ms）；每格=一拍/一次前向，格内左→右按阶段堆叠（宽度=该阶段时长，不代表真实先后）</small>`}));
+  legend(host, ECAT.map(c => ({name: '引擎·' + c[1], color: `var(${c[2]})`, box: 1})));
+  legend(host, RCAT.map(c => ({name: 'worker·' + c[1], color: `var(${c[2]})`, box: 1})).concat([{name: 'worker 空闲等 RPC', color: css('--idle'), box: 1}]));
+  const lanes = [];
+  for (const r of ranks) { if (X.engines[r]) lanes.push(['engine dp' + r, X.engines[r], 'E', r]); if (X.runners[r]) lanes.push(['worker dp' + r, X.runners[r], 'R', r]); }
+  const W = host.clientWidth || 1200, LH = 26, ML = 92, H = lanes.length * (LH + 6) + 22 + (X.api.length ? 40 : 0);
+  const svg = sv('svg', {viewBox: `0 0 ${W} ${H}`, height: H}); host.append(el('div', {class: 'lanes'}, svg));
+  const Xp = t => ML + (t - w0) / (w1 - w0) * (W - ML - 8);
+  const g = sv('g', {class: 'axis'}); svg.append(g);
+  for (const t of niceTicks(w0, w1, 8)) { g.append(sv('line', {x1: Xp(t), x2: Xp(t), y1: 0, y2: H - 16, class: 'gridl'})); const tx = sv('text', {x: Xp(t), y: H - 4, 'text-anchor': 'middle'}); tx.textContent = (t / 1000).toFixed(3) + 's'; g.append(tx); }
+  lanes.forEach(([name, rows, kind, r], li) => {
+    const y = li * (LH + 6) + 2;
+    const tx = sv('text', {x: 4, y: y + LH / 2 + 4, fill: rc(r), 'font-size': 11.5, 'font-weight': 600}); tx.textContent = name; svg.append(tx);
+    const C = kind === 'E' ? EC : RC_, cats = kind === 'E' ? ECAT : RCAT;
+    for (const x of rows) {
+      const t0 = x[C.t_ms], t1 = t0 + x[C.dur];
+      if (t1 < w0 || t0 > w1) continue;
+      if (kind === 'R' && x[C.idle_before]) { const a = t0 - x[C.idle_before]; svg.append(sv('rect', {x: Xp(Math.max(a, w0)), y: y + 3, width: Math.max(.5, Xp(Math.min(t0, w1)) - Xp(Math.max(a, w0))), height: LH - 6, fill: css('--idle')})); }
+      let acc = t0;
+      const tot = sum(cats.map(c => x[C[c[0]]] || 0)) || 1, scale = x[C.dur] / tot;
+      for (const [k, , col] of cats) {
+        const d = (x[C[k]] || 0) * scale; if (!d) continue;
+        const a = Math.max(acc, w0), b = Math.min(acc + d, w1); acc += d;
+        if (b <= a) continue;
+        const rr = sv('rect', {x: Xp(a), y, width: Math.max(.4, Xp(b) - Xp(a)), height: LH, fill: `var(${col})`});
+        rr.addEventListener('mousemove', e => showTip(e, cpuTip(name, kind, x, C, cats, X)));
+        rr.addEventListener('mouseleave', hideTip);
+        svg.append(rr);
+      }
+    }
+  });
+  if (X.api.length) {
+    const y = lanes.length * (LH + 6) + 4;
+    const tx = sv('text', {x: 4, y: y + 14, fill: css('--muted'), 'font-size': 11.5}); tx.textContent = 'API 循环 lag'; svg.append(tx);
+    for (const a of X.api) for (const [sec, mx] of a.lag) { if (mx == null) continue; const t = sec * 1000; if (t + 1000 < w0 || t > w1) continue; const h = Math.min(30, mx); svg.append(sv('rect', {x: Xp(Math.max(t, w0)), y: y + 30 - h, width: Math.max(1, Xp(Math.min(t + 1000, w1)) - Xp(Math.max(t, w0))), height: h, fill: css('--s2'), opacity: .6})); }
+  }
+  const inW = t => inWin(X.t0_epoch != null && baseT(A) ? (X.t0_epoch + t / 1000 - baseT(A)) : t / 1000);
+  host.append(el('h3', null, '每步时间分解（随时间，1 s 分箱，每拍平均 ms）'));
+  const g2 = el('div', {class: 'grid2'}); host.append(g2);
+  const decomp = (rows, C, cats, title, sec, SC) => {
+    const m = {};
+    if (sec) { for (const x of sec) { if (!x[SC.n] || !inW(x[SC.t_ms])) continue; const k = x[SC.t_ms] / 1000; const b = (m[k] = {n: x[SC.n]}); for (const [c] of cats) b[c] = x[SC[c]] || 0; } }
+    else for (const x of rows) { if (!inW(x[C.t_ms])) continue; const k = Math.floor(x[C.t_ms] / 1000); const b = (m[k] = m[k] || {n: 0}); b.n++; for (const [c] of cats) b[c] = (b[c] || 0) + (x[C[c]] || 0); }
+    const keys = Object.keys(m).map(Number).sort((a, b) => a - b);
+    const cb = chartBox(g2, title); legend(cb.box, cats.map(c => ({name: c[1], color: `var(${c[2]})`, box: 1})));
+    barChart(cb.c, keys.map(k => '+' + k + 's'), cats.map(([c, n, col]) => ({name: n, color: `var(${col})`, vals: keys.map(k => m[k][c] / m[k].n)})), {stacked: true, h: 200, rot: 1, extra: i => `<br><span class=m>${m[keys[i]].n} 拍</span>`});
+  };
+  const r0 = ranks[0];
+  if (X.engines[r0]) decomp(X.engines[r0], EC, ECAT, `engine dp${r0}：每拍各阶段 ms`, SEC ? X.engines_sec[r0] : null, SE);
+  if (X.runners[r0]) decomp(X.runners[r0], RC_, RCAT, `worker dp${r0}：每次前向各阶段 ms`, SEC ? X.runners_sec[r0] : null, SR);
+  host.append(el('h3', null, '“等 GPU” vs CPU 开销（时间窗内合计占比）'));
+  const shareRows = [];
+  const shares = (run, tag) => {
+    const Y = run.cpu; if (!Y) return;
+    const RCx = Object.fromEntries(Y.runner_cols.map((c, i) => [c, i])), ECx = Object.fromEntries(Y.engine_cols.map((c, i) => [c, i]));
+    if (Y.runners_sec) {
+      const A1 = Object.fromEntries(Y.sec_runner_cols.map((c, i) => [c, i])), E1 = Object.fromEntries(Y.sec_engine_cols.map((c, i) => [c, i]));
+      const pc = (num, den) => den ? (num / den * 100).toFixed(1) + '%' : '–';
+      for (const [r, rows] of Object.entries(Y.runners_sec)) {
+        const sel = rows.filter(x => inW(x[A1.t_ms])), n = sum(sel.map(x => x[A1.n])), tot = sum(sel.map(x => x[A1.dur])), idle = sum(sel.map(x => x[A1.idle_before]));
+        const e = (Y.engines_sec[r] || []).filter(x => inW(x[E1.t_ms])), et = sum(e.map(x => x[E1.dur]));
+        shareRows.push([`${tag} dp${r}`, n, fmt(tot / Math.max(1, n), 2), ...RCAT.map(([c]) => pc(sum(sel.map(x => x[A1[c]] || 0)), tot)), pc(idle, tot + idle),
+          pc(sum(e.map(x => x[E1.wait_worker])), et), pc(sum(e.map(x => x[E1.dp_sync] + x[E1.gloo])), et), pc(sum(e.map(x => x[E1.schedule] + x[E1.admit] + x[E1.post] + x[E1.inputs])), et)]);
+      }
+      return;
+    }
+    for (const [r, rows] of Object.entries(Y.runners)) {
+      const sel = rows.filter(x => inW(x[RCx.t_ms]));
+      const tot = sum(sel.map(x => x[RCx.dur])), idle = sum(sel.map(x => x[RCx.idle_before] || 0));
+      const e = (Y.engines[r] || []).filter(x => inW(x[ECx.t_ms])), et = sum(e.map(x => x[ECx.dur]));
+      const pc = (num, den) => den ? (num / den * 100).toFixed(1) + '%' : '–';
+      shareRows.push([`${tag} dp${r}`, sel.length, fmt(tot / Math.max(1, sel.length), 2), ...RCAT.map(([c]) => pc(sum(sel.map(x => x[RCx[c]] || 0)), tot)), pc(idle, tot + idle),
+        pc(sum(e.map(x => x[ECx.wait_worker] || 0)), et), pc(sum(e.map(x => (x[ECx.dp_sync] || 0) + (x[ECx.gloo] || 0))), et), pc(sum(e.map(x => (x[ECx.schedule] || 0) + (x[ECx.admit] || 0) + (x[ECx.post] || 0) + (x[ECx.inputs] || 0))), et)]);
+    }
+  };
+  shares(A, 'A'); if (B) shares(B, 'B');
+  table(host, ['rank', '前向次数', '每次前向 ms', ...RCAT.map(c => 'worker ' + c[1]), 'worker 空闲等 RPC', '引擎 等 worker', '引擎 DP 同步+gloo', '引擎 调度/放行/输出 CPU'], shareRows);
+  host.append(el('h3', null, 'DP 对齐等待（最快 rank 等最慢 rank）'));
+  const g3 = el('div', {class: 'grid2'}); host.append(g3);
+  const hist = (vals, edges) => { const c = Array(edges.length).fill(0); for (const v of vals) { let i = edges.findIndex(e => v < e); if (i < 0) i = edges.length - 1; c[i]++; } return c; };
+  const edges = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 1e9], elab = ['<0.05', '0.05–0.1', '0.1–0.2', '0.2–0.5', '0.5–1', '1–2', '2–5', '5–10', '10–20', '20–50', '≥50'];
+  const cbA = chartBox(g3, '引擎每拍 DP 同步+gloo 等待（ms）分布', 'gloo 集合通信在最后一个 rank 到达前一直阻塞：等待 ≈ 比最慢 rank 早到的时间' + (DW ? '；只统计逐拍细节窗口' : ''));
+  legend(cbA.box, ranks.filter(r => X.engines[r]).map(r => ({name: 'dp' + r, color: rc(r), box: 1})));
+  barChart(cbA.c, elab, ranks.filter(r => X.engines[r]).map(r => ({name: 'dp' + r, color: rc(r), vals: hist(X.engines[r].filter(x => inW(x[EC.t_ms])).map(x => (x[EC.dp_sync] || 0) + (x[EC.gloo] || 0)), edges)})), {h: 180, vfmt: v => fmt(v, 0)});
+  const cbB = chartBox(g3, 'worker 每次前向 DP 同步（ForwardMode.decide 的 all_gather）ms 分布');
+  legend(cbB.box, ranks.filter(r => X.runners[r]).map(r => ({name: 'dp' + r, color: rc(r), box: 1})));
+  barChart(cbB.c, elab, ranks.filter(r => X.runners[r]).map(r => ({name: 'dp' + r, color: rc(r), vals: hist(X.runners[r].filter(x => inW(x[RC_.t_ms])).map(x => x[RC_.dp_sync] || 0), edges)})), {h: 180, vfmt: v => fmt(v, 0)});
+  const byCall = {};
+  for (const r of ranks) for (const x of (X.runners[r] || [])) { if (!inW(x[RC_.t_ms]) || x[RC_.call] == null) continue; (byCall[x[RC_.call]] = byCall[x[RC_.call]] || []).push(x[RC_.dp_sync] || 0); }
+  const spread = Object.values(byCall).filter(v => v.length === ranks.length && v.length > 1).map(v => Math.max(...v) - Math.min(...v)).sort((a, b) => a - b);
+  host.append(el('div', {class: 'src', html: `同一次前向（call#）各 rank 的 decide 等待之差：中位 ${fmt(median(spread), 3)} ms，p90 ${fmt(spread[Math.floor(spread.length * .9)], 3)} ms（${spread.length} 次）。差值大 = 有 rank 迟到，其它 rank 在 all_gather 里空等。`}));
+  if (X.api.length) {
+    const cb = chartBox(host, 'API server 事件循环 lag（每秒最大值，ms）与每秒 HTTP 请求数', '定时器每 50 ms 测一次实际唤醒延迟');
+    legend(cb.box, X.api.map((a, i) => ({name: `${a.role} pid ${a.pid}`, color: `var(${RANKC[(i + 1) % 8]})`})).concat([{name: '请求数/秒（合计）', color: css('--muted'), dash: 1}]));
+    const rate = {}; X.api.forEach(a => a.lag.forEach(([s_, , , n]) => rate[s_] = (rate[s_] || 0) + n));
+    lineChart(cb.c, X.api.map((a, i) => ({name: `pid ${a.pid}`, color: `var(${RANKC[(i + 1) % 8]})`, pts: a.lag.map(([s_, mx]) => [s_, mx])})).concat([{name: '请求/秒', color: css('--muted'), dash: 1, pts: Object.entries(rate).map(([k, v]) => [+k, v])}]), {h: 170, xLabel: 's（CPU 时间线零点起）'});
+  }
+  host.append(el('h3', null, '每请求端到端分解'));
+  const Q = Object.fromEntries(X.req_cols.map((c, i) => [c, i]));
+  const hasEnq = X.requests.some(x => x[Q.enq] != null);
+  // when the engine-receive time is missing (11-04: Scheduler.extend not wrapped) show 提交→首次调度 as one segment
+  const segs = [['前端（HTTP→提交）', 'http0', 'submit', '--s1']].concat(hasEnq
+    ? [['送达引擎', 'submit', 'enq', '--s7'], ['排队', 'enq', 'pf0', '--gap']]
+    : [['提交→首次调度（含送达+排队）', 'submit', 'pf0', '--gap']]).concat([['prefill→首个输出', 'pf0', 'out0', '--pf'], ['decode→最后输出', 'out0', 'out1', '--dc'], ['回写结束', 'out1', 'http1', '--s3']]);
+  const rankOk = x => x[Q.rank] == null || S.ranks[x[Q.rank]] !== false;
+  const rq = X.requests.filter(x => (x[Q.submit] == null || inW(x[Q.submit])) && rankOk(x));
+  if (X.req_note) host.append(el('div', {class: 'src', html: X.req_note}));
+  const segv = segs.map(([, a, b]) => rq.map(x => x[Q[a]] != null && x[Q[b]] != null ? x[Q[b]] - x[Q[a]] : null));
+  const pct = (v, p) => { const b = v.filter(x => x != null).sort((x, y) => x - y); return b.length ? b[Math.min(b.length - 1, Math.floor(b.length * p))] : null; };
+  table(host, ['阶段', '有数据请求', 'p50 ms', 'p90 ms', 'p99 ms', '均值 ms'], segs.map((sg, i) => [sg[0], segv[i].filter(x => x != null).length, fmt(pct(segv[i], .5), 2), fmt(pct(segv[i], .9), 2), fmt(pct(segv[i], .99), 2), fmt(mean(segv[i]), 2)]));
+  // per-rank medians (rows follow the rank toggles in the header)
+  const rkSet = [...new Set(rq.map(x => x[Q.rank]).filter(v => v != null))].sort((p, q) => p - q);
+  if (rkSet.length > 1) {
+    const cbr = chartBox(host, '各 DP rank 的请求阶段中位数（ms）', '请求按被路由到的 DP rank 分组；顶部 rank 按钮可筛选');
+    legend(cbr.box, segs.map(sg => ({name: sg[0], color: `var(${sg[3]})`, box: 1})));
+    barChart(cbr.c, rkSet.map(r => `dp${r}（${rq.filter(x => x[Q.rank] === r).length} 个）`), segs.map(([n, a, b, col]) => ({name: n, color: `var(${col})`, vals: rkSet.map(r => median(rq.filter(x => x[Q.rank] === r).map(x => x[Q[a]] != null && x[Q[b]] != null ? x[Q[b]] - x[Q[a]] : null)) || 0)})), {stacked: true, h: 190});
+  }
+  const sample = rq.filter(x => x[Q.http0] != null && x[Q.http1] != null).slice(0, 60);
+  if (sample.length) {
+    const cb = chartBox(host, `请求瀑布（时间窗内前 ${sample.length} 个，按提交时间）`, '每行一个请求：左侧“dpN · 输入长度”是它被路由到的 DP rank（颜色同 rank 按钮）和输入 token 数；颜色条=阶段；悬停看请求 id 等');
+    legend(cb.box, segs.map(sg => ({name: sg[0], color: `var(${sg[3]})`, box: 1})));
+    const LW = 112;
+    const W2 = cb.c.clientWidth || 1200, RH = 10, H2 = sample.length * (RH + 2) + 20, t0 = Math.min(...sample.map(x => x[Q.http0])), t1 = Math.max(...sample.map(x => x[Q.http1]));
+    const svg2 = sv('svg', {viewBox: `0 0 ${W2} ${H2}`, height: H2}); cb.c.append(svg2);
+    const X2 = t => LW + (t - t0) / (t1 - t0 || 1) * (W2 - LW - 10);
+    const ga = sv('g', {class: 'axis'}); svg2.append(ga);
+    for (const t of niceTicks(t0, t1, 8)) { const tx = sv('text', {x: X2(t), y: H2 - 4, 'text-anchor': 'middle'}); tx.textContent = (t / 1000).toFixed(2) + 's'; ga.append(tx); }
+    const inTok = v => v == null ? '输入 ?' : (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(v)) + ' tok';
+    sample.forEach((x, i) => {
+      const y = i * (RH + 2), r = x[Q.rank];
+      const lab = sv('text', {x: 2, y: y + RH - 1, 'font-size': 9.5, fill: r == null ? css('--muted') : rc(r), 'font-weight': r == null ? 400 : 600});
+      lab.textContent = (r == null ? 'rank 未知' : 'dp' + r) + ' · ' + inTok(x[Q.in]); svg2.append(lab);
+      const tip = e => showTip(e, `<b>请求 id ${x[Q.id]}</b><br>${r == null ? 'rank 未知' : 'DP rank ' + r} · 输入 ${x[Q.in] ?? '–'} tok${x[Q.cached] != null ? `（前缀命中 ${x[Q.cached]}）` : ''}<br>` + segs.map(([n2, a2, b2]) => `${n2}: <b>${x[Q[a2]] != null && x[Q[b2]] != null ? fmt(x[Q[b2]] - x[Q[a2]], 2) : '–'}</b> ms`).join('<br>') + `<br><span class=m>提交 ${bjt(X.t0_epoch + (x[Q.submit] ?? x[Q.http0]) / 1000)} · prefill 步数 ${x[Q.pf_steps] ?? '–'} · 抽样到的 decode 步 ${x[Q.dc_seen] ?? 0} · SSE 块 ${x[Q.chunks] ?? '–'}</span>`);
+      lab.addEventListener('mousemove', tip); lab.addEventListener('mouseleave', hideTip);
+      segs.forEach(([n, a, b, col]) => { if (x[Q[a]] == null || x[Q[b]] == null) return; const rr = sv('rect', {x: X2(x[Q[a]]), y, width: Math.max(.5, X2(x[Q[b]]) - X2(x[Q[a]])), height: RH, fill: `var(${col})`}); rr.addEventListener('mousemove', tip); rr.addEventListener('mouseleave', hideTip); svg2.append(rr); });
+    });
+  }
+}
+function cpuTip(name, kind, x, C, cats, X) {
+  return `<b>${name} · ${kind === 'E' ? '拍' : '前向 call#' + (x[C.call] ?? '–')}</b> <span class=m>+${(x[C.t_ms] / 1000).toFixed(3)} s · ${bjt(X.t0_epoch + x[C.t_ms] / 1000)}</span><br>总 <b>${fmt(x[C.dur], 2)}</b> ms` +
+    (kind === 'R' && x[C.idle_before] != null ? `（之前空闲等 RPC ${fmt(x[C.idle_before], 2)} ms）` : '') + '<br>' +
+    cats.map(([k, n, col]) => x[C[k]] ? `<span style="color:var(${col})">■</span> ${n}: ${fmt(x[C[k]], 3)}` : '').filter(Boolean).join('<br>') +
+    (kind === 'E' ? `<br><span class=m>${x[C.kind] || ''} p=${x[C.p] ?? 0}/${x[C.pt] ?? 0}tok d=${x[C.d] ?? 0} run=${x[C.running] ?? '–'} wait=${x[C.waiting] ?? '–'} · ${x[C.admit_reason] || ''}</span>` : `<br><span class=m>p=${x[C.p] ?? 0}/${x[C.pt] ?? 0}tok d=${x[C.d] ?? 0}</span>`);
+}
+
+function renderTimeline(A) {
+  const host = $('#tlBody'); host.innerHTML = '';
+  const T = A.trace;
+  if (!T) { host.append(pend('该运行没有 torch profiler trace。', '带 <code>--torch-profiler-dir</code> 起服务、压测中 <code>POST /start_profile</code> / <code>/stop_profile</code>，再用 <code>build_sched_data.py</code> 生成。')); return; }
+  const C = Object.fromEntries(T.cols.map((c, i) => [c, i]));
+  const ranks = T.ranks.map((rows, r) => ({r, rows})).filter(x => S.ranks[x.r]);
+  const tEnd = Math.max(...T.ranks.map(rows => rows.length ? rows.at(-1)[C.cpu_t_ms] + rows.at(-1)[C.cpu_dur] : 0));
+  if (!S.tlWin || S.tlWin[1] > tEnd) S.tlWin = [Math.max(0, tEnd / 2 - 600), Math.min(tEnd, tEnd / 2 + 600)];
+  host.append(el('div', {class: 'src', html: `trace 窗口 ${T.window_s.join(' / ')} s，步数 ${T.n_steps.join(' / ')}；零点 ≈ ${bjtFull(T.t0_epoch)}（北京时间，${T.t0_note}）。${T.graph_note}。<b class="warn">graph 回放下 profiler 记录的单 kernel 时长可能失真，这里只用注解区间和 kernel 并集做步级统计。</b>`}));
+  // overview strip: per step phase of rank0 + step wall time
+  const ov = chartBox(host, '概览：rank 0 每步 GPU 窗口时长（ms），颜色=阶段', '拖动选时间窗（单位 ms，trace 零点起）');
+  const r0 = T.ranks[ranks[0]?.r ?? 0];
+  const ptsD = r0.filter(x => x[C.phase] === 'decode' && x[C.gpu_win]).map(x => [x[C.cpu_t_ms], x[C.gpu_win]]);
+  const ptsP = r0.filter(x => x[C.phase] === 'prefill' && x[C.gpu_win]).map(x => [x[C.cpu_t_ms], x[C.gpu_win]]);
+  legend(ov.box, [{name: 'decode 步', color: css('--dc'), box: 1}, {name: 'prefill 步', color: css('--pf'), box: 1}, {name: '当前选择', color: css('--csa'), box: 1}]);
+  lineChart(ov.c, [{name: 'decode', color: css('--dc'), pts: ptsD, dots: 1, r: 1.6}, {name: 'prefill', color: css('--pf'), pts: ptsP, dots: 1, r: 2.6}], {h: 120, yLabel: 'ms', xfmt: v => (v / 1000).toFixed(0) + 's', tipX: v => `+${(v / 1000).toFixed(3)} s · ${bjt(T.t0_epoch + v / 1000)}`, band: [[S.tlWin[0], S.tlWin[1], css('--csa')]], brush: (a, b) => { S.tlWin = [a, b]; renderTimeline(A); }});
+  // lanes
+  const [w0, w1] = S.tlWin;
+  host.append(el('div', {class: 'ctitle', html: `步时间线 <small>${(w0 / 1000).toFixed(2)}–${(w1 / 1000).toFixed(2)} s（${((w1 - w0)).toFixed(0)} ms）· 悬停看每步详情</small>`}));
+  legend(host, [{name: 'CPU forward（prepare 等待 + launch）', color: css('--muted'), box: 1}, {name: 'GPU decode 前向', color: css('--dc'), box: 1}, {name: 'GPU prefill 前向', color: css('--pf'), box: 1}, {name: 'GPU DSpark 草稿', color: css('--draft'), box: 1}, {name: '引擎核非前向（两次 forward 之间）', color: css('--gap'), box: 1}]);
+  const W = host.clientWidth || 1200, laneH = 34, H = ranks.length * (laneH + 6) + 22, ML = 56;
+  const svg = sv('svg', {viewBox: `0 0 ${W} ${H}`, height: H}); const lanes = el('div', {class: 'lanes'}, svg); host.append(lanes);
+  const X = t => ML + (t - w0) / (w1 - w0) * (W - ML - 8);
+  const g = sv('g', {class: 'axis'}); svg.append(g);
+  for (const t of niceTicks(w0, w1, 8)) { g.append(sv('line', {x1: X(t), x2: X(t), y1: 0, y2: H - 16, class: 'gridl'})); const tx = sv('text', {x: X(t), y: H - 4, 'text-anchor': 'middle'}); tx.textContent = (t / 1000).toFixed(3) + 's'; g.append(tx); }
+  ranks.forEach(({r, rows}, li) => {
+    const y = li * (laneH + 6) + 2;
+    const tx = sv('text', {x: 4, y: y + laneH / 2 + 4, fill: rc(r), 'font-size': 12, 'font-weight': 600}); tx.textContent = 'rank ' + r; svg.append(tx);
+    for (const x of rows) {
+      const c0 = x[C.cpu_t_ms], c1 = c0 + x[C.cpu_dur];
+      if (c1 < w0 || c0 > w1) continue;
+      const add = (a, b, yy, hh, fill, op = 1) => { const rr = sv('rect', {x: X(Math.max(a, w0)), y: yy, width: Math.max(.6, X(Math.min(b, w1)) - X(Math.max(a, w0))), height: hh, fill, opacity: op, rx: 1.5}); rr.addEventListener('mousemove', e => showTip(e, stepTip(T, C, r, x))); rr.addEventListener('mouseleave', hideTip); svg.append(rr); };
+      add(c0, c1, y, laneH / 2 - 2, css('--muted'), .45);
+      if (x[C.gap_next] != null) add(c1, c1 + x[C.gap_next], y, laneH / 2 - 2, css('--gap'), .55);
+      if (x[C.gpu_t_ms] != null) {
+        add(x[C.gpu_t_ms], x[C.gpu_t_ms] + x[C.gpu_dur], y + laneH / 2, laneH / 2 - 1, x[C.phase] === 'prefill' ? css('--pf') : x[C.dummy] ? css('--dummy') : css('--dc'));
+        if (x[C.gpu_draft]) { const ds = x[C.gpu_t_ms] + x[C.gpu_dur] + 1.0; add(ds, ds + x[C.gpu_draft], y + laneH / 2, laneH / 2 - 1, css('--draft'), .9); }
+      }
+    }
+  });
+  // per-rank summary table in window
+  const rowsT = ranks.map(({r, rows}) => {
+    const sel = rows.filter(x => x[C.cpu_t_ms] >= w0 && x[C.cpu_t_ms] <= w1), dec = sel.filter(x => x[C.phase] === 'decode'), pf = sel.filter(x => x[C.phase] === 'prefill');
+    const idle = sum(sel.map(x => x[C.gpu_win] != null && x[C.gpu_busy] != null ? x[C.gpu_win] - x[C.gpu_busy] : 0)), win = sum(sel.map(x => x[C.gpu_win] || 0));
+    return [`<span style="color:${rc(r)}">rank ${r}</span>`, sel.length, dec.length, pf.length, fmt(median(dec.map(x => x[C.gpu_dur])), 2), fmt(median(dec.map(x => x[C.gpu_win])), 2), fmt(median(dec.map(x => x[C.gpu_draft])), 2), fmt(median(dec.map(x => x[C.gap_next])), 2), fmt(median(dec.map(x => x[C.prep])), 2), fmt(median(dec.map(x => x[C.bs])), 0), fmt(mean(pf.map(x => x[C.gpu_dur])), 1), fmt(mean(pf.map(x => x[C.tok])), 0), win ? (idle / win * 100).toFixed(1) + '%' : '–'];
+  });
+  host.append(el('h3', null, '窗口内各 rank 统计（中位数）'));
+  table(host, ['rank', '步数', 'decode', 'prefill', 'decode GPU 前向 ms', 'decode GPU 步长 ms', 'DSpark 草稿 ms', '引擎核非前向 ms', 'CPU prepare ms', 'decode bs', 'prefill GPU ms(均)', 'prefill tok(均)', 'GPU 空闲占比'], rowsT);
+  // per-step decomposition (GPU side) for the first selected rank
+  const rr = ranks[0]; if (!rr) return;
+  const sel = rr.rows.filter(x => x[C.cpu_t_ms] >= w0 && x[C.cpu_t_ms] <= w1 && x[C.gpu_win]);
+  const cb = chartBox(host, `rank ${rr.r} 每步 GPU 步长分解（ms）`, 'GPU 步长 = 本步模型前向起点到下一步起点；其它 GPU = 准备/后处理等 kernel；空闲 = 无任何 stream 在跑');
+  legend(cb.box, [{name: '模型前向', color: css('--dc'), box: 1}, {name: 'DSpark 草稿', color: css('--draft'), box: 1}, {name: '其它 GPU', color: css('--hca'), box: 1}, {name: 'GPU 空闲', color: css('--gap'), box: 1}]);
+  const cats = sel.map(x => `#${x[C.k]}`);
+  const fwdv = sel.map(x => x[C.gpu_dur]), dr = sel.map(x => x[C.gpu_draft] || 0), idle = sel.map(x => Math.max(0, x[C.gpu_win] - (x[C.gpu_busy] || x[C.gpu_win]))), oth = sel.map((x, i) => Math.max(0, x[C.gpu_win] - fwdv[i] - dr[i] - idle[i]));
+  barChart(cb.c, cats, [{name: '模型前向', color: css('--dc'), vals: fwdv}, {name: 'DSpark 草稿', color: css('--draft'), vals: dr}, {name: '其它 GPU', color: css('--hca'), vals: oth}, {name: 'GPU 空闲', color: css('--gap'), vals: idle}], {stacked: true, h: 200, yLabel: 'ms', extra: i => `<br><span class=m>${sel[i][C.phase]} bs=${sel[i][C.bs]} tok=${sel[i][C.tok]}</span>`});
+}
+function stepTip(T, C, r, x) {
+  const dp = (T.aligned || []).find(a => a[11][r] === x[C.k]);
+  return `<b>rank ${r} · 步 #${x[C.k]} · ${x[C.phase] || '?'}${x[C.dummy] ? '（dummy）' : ''}</b><br>` +
+    `<span class=m>+${(x[C.cpu_t_ms] / 1000).toFixed(3)} s · ${bjt(T.t0_epoch + x[C.cpu_t_ms] / 1000)}</span><br>` +
+    `bs ${x[C.bs] ?? '–'}${x[C.graph_bs] ? ' / 图 ' + x[C.graph_bs] : ''} · tok ${x[C.tok] ?? '–'}${x[C.pad_tok] ? ' / pad ' + x[C.pad_tok] : ''}${x[C.ctx_n] ? ` · ctx 条数 ${x[C.ctx_n]}（列出的均值 ${fmt(x[C.ctx_mean], 0)}）` : ''}<br>` +
+    `CPU forward <b>${fmt(x[C.cpu_dur], 2)}</b> ms = prepare ${fmt(x[C.prep], 2)}（含 gloo ${fmt(x[C.gloo], 2)}）+ run_model ${fmt(x[C.run], 2)} + post ${fmt(x[C.post], 2)} + draft_kv ${fmt(x[C.draftkv], 2)} + propose ${fmt(x[C.propose], 2)}<br>` +
+    `引擎核非前向（到下一次 forward）<b>${fmt(x[C.gap_next], 2)}</b> ms<br>` +
+    `GPU 前向 <b>${fmt(x[C.gpu_dur], 2)}</b> ms · 草稿 ${fmt(x[C.gpu_draft], 2)} · 步长 ${fmt(x[C.gpu_win], 2)} · 忙碌 ${fmt(x[C.gpu_busy], 2)}` +
+    (dp ? `<br>DP：${dp[2]} tok [${dp[3].join(', ')}] · max/mean ${fmt(dp[6], 3)} · GPU 起步时差 ${fmt(dp[7], 2)} ms` : '');
+}
+
+function renderDP(A, B) {
+  const host = $('#dpBody'); host.innerHTML = '';
+  const T = A.trace;
+  if (T && T.aligned && T.aligned.length) {
+    const AC = Object.fromEntries(T.aligned_cols.map((c, i) => [c, i]));
+    const al = T.aligned;
+    const pf = al.filter(a => a[AC.phase_mix].includes('p')), dc = al.filter(a => !a[AC.phase_mix].includes('p'));
+    const lossPf = sum(pf.map(a => a[AC.est_loss_ms])), lossDc = sum(dc.map(a => a[AC.est_loss_ms]));
+    const spanMs = al.at(-1)[AC.t_ms] - al[0][AC.t_ms];
+    const tiles = el('div', {class: 'tiles'}); host.append(tiles);
+    const tile = (v, k) => tiles.append(el('div', {class: 'tile'}, el('div', {class: 'v'}, v), el('div', {class: 'k'}, k)));
+    tile(al.length, `对齐上的步（${T.n_steps.join('/')} 步/rank）`);
+    tile(fmt(mean(pf.map(a => a[AC.imb])), 3), 'prefill 步 token max/mean（均值）');
+    tile(fmt(mean(dc.map(a => a[AC.imb])), 3), 'decode 步 token max/mean（均值）');
+    tile(fmt(median(al.map(a => a[AC.gpu_start_skew])), 2) + ' ms', 'GPU 起步时差中位数');
+    tile((lossPf / spanMs * 100).toFixed(1) + '%', 'prefill 不均衡损失估算（占窗口）');
+    tile((lossDc / spanMs * 100).toFixed(1) + '%', 'decode 不均衡损失估算（占窗口）');
+    host.append(el('div', {class: 'src', html: '对齐方法：同一锁步步在每个 rank 的标签里都带同一个 <code>dp=[…]</code> 向量（各 rank 本步 token 数与阶段），按它把 4 个 rank 的步对上。<b>不均衡损失是估算上界</b>：假设步耗时 ∝ token 数，损失 = 最慢 rank 的 GPU 前向 × (1 − mean/max)；decode 的耗时并不与 token 成正比（权重读取占主导），decode 项偏大，仅作相对比较。'}));
+    const g2 = el('div', {class: 'grid2'}); host.append(g2);
+    const c1 = chartBox(g2, '每步 token 不均衡 max/mean', '点=一步');
+    legend(c1.box, [{name: 'prefill 步', color: css('--pf'), box: 1}, {name: 'decode 步', color: css('--dc'), box: 1}]);
+    lineChart(c1.c, [{name: 'prefill', color: css('--pf'), pts: pf.map(a => [a[AC.t_ms] / 1000, a[AC.imb], `tok [${a[AC.tok].join(',')}]`]), dots: 1, r: 3}, {name: 'decode', color: css('--dc'), pts: dc.map(a => [a[AC.t_ms] / 1000, a[AC.imb]]), dots: 1, r: 1.5}], {h: 190, yMin: 1, xLabel: 's（trace 零点起）', tipX: v => `+${v.toFixed(2)} s`, yfmt: v => (+v).toFixed(3)});
+    const c2 = chartBox(g2, '每步 GPU 起步时差（ms）', '同一步各 rank 模型前向起点的最大差；先到的 rank 在第一个集合通信处等');
+    lineChart(c2.c, [{name: 'prefill', color: css('--pf'), pts: pf.map(a => [a[AC.t_ms] / 1000, a[AC.gpu_start_skew]]), dots: 1, r: 3}, {name: 'decode', color: css('--dc'), pts: dc.map(a => [a[AC.t_ms] / 1000, a[AC.gpu_start_skew]]), dots: 1, r: 1.5}], {h: 190, xLabel: 's', tipX: v => `+${v.toFixed(2)} s`, yfmt: v => (+v).toFixed(2)});
+    // per-rank tokens in prefill steps
+    const n = T.ranks.length;
+    const pfTok = Array(n).fill(0), pfMaxCnt = Array(n).fill(0);
+    for (const a of pf) { a[AC.tok].forEach((t, i) => pfTok[i] += t); pfMaxCnt[a[AC.tok].indexOf(a[AC.max_tok])]++; }
+    const g4 = el('div', {class: 'grid2'}); host.append(g4);
+    const c3 = chartBox(g4, 'trace 窗口内各 rank 的 prefill token 总量');
+    barChart(c3.c, [...Array(n).keys()].map(i => 'rank ' + i), [{name: 'prefill token', color: css('--pf'), vals: pfTok}], {h: 150, vfmt: v => fmt(v, 0)});
+    const c3b = chartBox(g4, 'prefill 步里当“最慢 rank”（token 最多）的次数');
+    barChart(c3b.c, [...Array(n).keys()].map(i => 'rank ' + i), [{name: '次数', color: css('--hca'), vals: pfMaxCnt}], {h: 150, vfmt: v => fmt(v, 0)});
+  } else host.append(pend('逐步 DP 对齐数据需要 trace（见“步时间线”）。'));
+  // whole-run routing
+  host.append(el('h3', null, '整段压测：请求路由与在途负载（server.log）'));
+  const L = A.log; if (!L || !L.requests.length) { host.append(pend('server.log 里没有 “Engine Core Mgr: add rankN” 行')); return; }
+  const base = baseT(A), n = nRanks(A);
+  const g3 = el('div', {class: 'grid2'}); host.append(g3);
+  const cnt = Array(n).fill(0), tok = Array(n).fill(0);
+  for (const [t, r, k] of L.requests) if (inWin(t - base) && r < n) { cnt[r]++; tok[r] += k; }
+  const c4 = chartBox(g3, '各 rank 收到的请求数', `max/mean ${fmt(Math.max(...cnt) / mean(cnt), 3)}`);
+  barChart(c4.c, [...Array(n).keys()].map(i => 'rank ' + i), [{name: '请求数', color: css('--s1'), vals: cnt}], {h: 170, vfmt: v => fmt(v, 0)});
+  const c4b = chartBox(g3, '各 rank 收到的输入 token（含会命中前缀的部分）', `max/mean ${fmt(Math.max(...tok) / mean(tok), 3)}`);
+  barChart(c4b.c, [...Array(n).keys()].map(i => 'rank ' + i), [{name: '输入 token', color: css('--s3'), vals: tok}], {h: 170, vfmt: v => fmt(v, 0)});
+  const pb = L.prefill_batches || {};
+  const pfr = [...Array(n).keys()].map(r => (pb[r] || []).filter(x => inWin(x[0] - base)));
+  const pNew = pfr.map(a => sum(a.map(x => x[2]))), pDone = pfr.map(a => sum(a.map(x => x[3])));
+  const c5 = chartBox(g3, '各 rank 实际 prefill 的新 token', `命中前缀比例 ${pNew.map((v, i) => (pDone[i] / (v + pDone[i]) * 100).toFixed(1) + '%').join(' / ')}；另有 ${L.prefill_batch_unattributed} 个批次无法归属 rank`);
+  barChart(c5.c, [...Array(n).keys()].map(i => 'rank ' + i), [{name: '新 token', color: css('--pf'), vals: pNew}], {h: 170, vfmt: v => fmt(v, 0), extra: i => `<br><span class=m>已缓存 ${fmt(pDone[i], 0)} · 批次 ${pfr[i].length} · 每批均 ${fmt(pNew[i] / pfr[i].length, 0)} 新 token</span>`});
+  const c5b = chartBox(g3, '各 rank prefill 批次数');
+  barChart(c5b.c, [...Array(n).keys()].map(i => 'rank ' + i), [{name: '批次', color: css('--hca'), vals: pfr.map(a => a.length)}], {h: 170, vfmt: v => fmt(v, 0)});
+  const inf = L.inflight.filter(x => inWin(x[0] - base));
+  const c6 = chartBox(host, '在途请求数（每 rank，每秒最后一次路由时的快照）', '来自 Engine Core Mgr 路由日志；只在有新请求到达时更新');
+  legend(c6.box, [...Array(n).keys()].map(r => ({name: 'rank ' + r, color: rc(r)})));
+  lineChart(c6.c, [...Array(n).keys()].filter(r => S.ranks[r]).map(r => ({name: 'rank ' + r, color: rc(r), pts: inf.map(x => [x[0] - base, x[1][r]])})), {h: 200, xLabel: 's', tipX: v => `+${v.toFixed(0)} s · ${bjt(base + v)}`, brush: setWin});
+  const c7 = chartBox(host, '排队中的 prefill token（每 rank）');
+  lineChart(c7.c, [...Array(n).keys()].filter(r => S.ranks[r]).map(r => ({name: 'rank ' + r, color: rc(r), pts: inf.map(x => [x[0] - base, x[2][r]])})), {h: 180, xLabel: 's', tipX: v => `+${v.toFixed(0)} s · ${bjt(base + v)}`, brush: setWin});
+  // spread over time: max/mean of inflight
+  const c8 = chartBox(host, '在途请求 max/mean（随时间）', 'A 实线 / B 虚线');
+  const spread = run => { const b = baseT(run); return run.log.inflight.filter(x => inWin(x[0] - b)).map(x => { const m = mean(x[1]); return [x[0] - b, m ? Math.max(...x[1]) / m : null]; }); };
+  const ser = [{name: 'A ' + A.meta.label, color: css('--s1'), pts: spread(A)}];
+  if (B && B.log && B.log.inflight.length) ser.push({name: 'B ' + B.meta.label, color: css('--s2'), dash: 1, pts: spread(B)});
+  lineChart(c8.c, ser, {h: 160, yMin: 1, xLabel: 's', yfmt: v => (+v).toFixed(2), brush: setWin});
+}
+
+function renderLoad(A, B) {
+  const host = $('#loadBody'); host.innerHTML = '';
+  const both = [A, B].filter(Boolean);
+  const pairIn = (title, sub, f, o = {}) => {
+    const cb = chartBox(g, title, sub);
+    const ser = [];
+    both.forEach((run, i) => { const b = baseT(run); const pts = (f(run) || []).map(p => [p[0] - b, p[1]]).filter(p => inWin(p[0])); if (pts.length) ser.push({name: (i ? 'B ' : 'A ') + run.meta.label, color: i ? css('--s2') : css('--s1'), dash: i, pts}); });
+    if (!ser.length) { cb.c.append(pend('无数据')); return; }
+    if (ser.length > 1) legend(cb.box, ser.map(s => ({name: s.name, color: s.color, dash: s.dash})));
+    lineChart(cb.c, ser, Object.assign({h: 170, xLabel: 's', tipX: v => `+${v.toFixed(0)} s · A ${bjt(baseT(A) + v)}`, brush: setWin, band: phaseBands(A, ep => ep - baseT(A))}, o));
+  };
+  if (A.phases) host.append(el('div', {class: 'src', html: phaseNote(A)}));
+  const g = el('div', {class: 'grid2'}); host.append(g);
+  pairIn('生成吞吐 tok/s（Prometheus，全部 rank）', '每 15 s 抓一次的计数器差分', r => r.prom && r.prom.map(p => [p.t, p.gen_tps]));
+  pairIn('prompt 吞吐 tok/s（含命中前缀）', '', r => r.prom && r.prom.map(p => [p.t, p.prompt_tps]));
+  pairIn('running 请求数（全部 rank）', '', r => r.prom && r.prom.map(p => [p.t, p.running]));
+  pairIn('waiting 请求数（全部 rank）', '', r => r.prom && r.prom.map(p => [p.t, p.waiting]));
+  pairIn('KV cache 使用率', '', r => r.prom && r.prom.map(p => [p.t, p.kv]), {yfmt: v => (v * 100).toFixed(1) + '%'});
+  pairIn('DSpark 接受率（区间）', 'accepted / draft 计数器差分', r => r.prom && r.prom.map(p => [p.t, p.accept]), {yfmt: v => (v * 100).toFixed(1) + '%'});
+  // per-rank engine lines for A
+  const L = A.log, base = baseT(A), n = nRanks(A);
+  host.append(el('h3', null, `各 rank（A：${A.meta.label}，引擎日志每 ~10 s 一行）`));
+  const g2 = el('div', {class: 'grid3'}); host.append(g2);
+  const eng = (title, idx, o = {}) => { const cb = chartBox(g2, title); legend(cb.box, [...Array(n).keys()].map(r => ({name: 'rank ' + r, color: rc(r)}))); lineChart(cb.c, [...Array(n).keys()].filter(r => S.ranks[r]).map(r => ({name: 'rank ' + r, color: rc(r), pts: (L.engine[r] || []).map(x => [x[0] - base, x[idx]]).filter(p => inWin(p[0]))})), Object.assign({h: 160, xLabel: 's', tipX: v => `+${v.toFixed(0)} s · ${bjt(base + v)}`, brush: setWin}, o)); };
+  eng('running', 3); eng('waiting', 4); eng('KV 使用率 %', 5); eng('生成 tok/s', 2); eng('prompt tok/s', 1); eng('前缀命中率 %', 6);
+  // StepTimer
+  host.append(el('h3', null, 'StepTimer 窗口（每 500 步一行；日志里只有打印它的 rank）'));
+  const st = L.steptimer || {}, rk = Object.keys(st);
+  if (!rk.length) host.append(pend('server.log 中无 [StepTimer] 行', '需要服务端打印 <code>[StepTimer]</code> 行。'));
+  else {
+    const SC = Object.fromEntries(L.steptimer_cols.map((c, i) => [c, i]));
+    host.append(el('div', {class: 'src', html: `${rk.length} 条 StepTimer 序列（${rk.join(', ')}）：日志里的 rank= 是各 DP 引擎内部的 TP rank，多个进程都打 rank=0，按累计计数的连续性拆成进程 p0…；无法对应到具体 DP rank。`}));
+    const g3 = el('div', {class: 'grid3'}); host.append(g3);
+    const lines = (title, sub, f, o = {}) => { const cb = chartBox(g3, title, sub); legend(cb.box, rk.map((r, i) => ({name: r, color: rc(i)}))); lineChart(cb.c, rk.map((r, i) => ({name: r, color: rc(i), pts: st[r].filter(x => inWin(x[0] - base)).map(x => [x[0] - base, f(x)])})), Object.assign({h: 170, xLabel: 's', brush: setWin, tipX: v => `+${v.toFixed(0)} s · ${bjt(base + v)}`}, o)); };
+    lines('decode 每步墙钟 ms', '每 500 步窗口均值', x => x[SC.dc_wall_ms]);
+    lines('decode 每步前向 ms', '', x => x[SC.dc_fwd_ms]);
+    lines('decode 每步非前向 ms', '墙钟 − 前向', x => x[SC.dc_wall_ms] != null && x[SC.dc_fwd_ms] != null ? x[SC.dc_wall_ms] - x[SC.dc_fwd_ms] : null);
+    lines('prefill 每步墙钟 ms', '', x => x[SC.pf_wall_ms]);
+    lines('prefill 每步 token', '', x => x[SC.pf_toks]);
+    lines('prefill 占墙钟比例', '', x => x[SC.pf_wall_frac], {yfmt: v => (+v).toFixed(3)});
+    lines('decode 每步请求数（bs）', '', x => x[SC.dc_bs]);
+    lines('GC 暂停 ms / 窗口', '', x => x[SC.gc_ms]);
+  }
+  const ca = el('div', {class: 'grid2'}); host.append(ca);
+  const c9 = chartBox(ca, '前缀缓存命中率（[Cache Stats Interval]，每 100 请求）', '各 rank 行混在一起（日志无 rank 字段）');
+  lineChart(c9.c, [{name: 'hit %', color: css('--swa'), pts: (L.cache || []).map(x => [x[0] - base, x[4]]).filter(p => inWin(p[0])), dots: 1, r: 2}], {h: 160, xLabel: 's', brush: setWin, yfmt: v => (+v).toFixed(1)});
+  const c10 = chartBox(ca, 'paged KV 页使用（[Pool Pressure]）', '各 rank 行混在一起');
+  lineChart(c10.c, [{name: 'used pages', color: css('--csa'), pts: (L.pool || []).map(x => [x[0] - base, x[1]]).filter(p => inWin(p[0])), dots: 1, r: 2}], {h: 160, xLabel: 's', brush: setWin});
+}
+
+function renderLife(A, B) {
+  const host = $('#lifeBody'); host.innerHTML = '';
+  const both = [A, B].filter(Boolean);
+  const keys = [['ttft_ns', 'TTFT（ms）'], ['tpot_ns', 'TPOT（ms）'], ['sample_latency_ns', '端到端时延（ms）'], ['isl', 'ISL（token）'], ['osl', 'OSL（token）']];
+  if (!both.some(r => r.client)) host.append(pend('没有客户端 final_snapshot.json'));
+  else {
+    const g = el('div', {class: 'grid3'}); host.append(g);
+    for (const [k, lab] of keys) {
+      const s = A.client && A.client.series[k]; if (!s) continue;
+      const cb = chartBox(g, lab, `n=${s.count}，均值 ${fmt(s.mean, 1)}`);
+      const sb = B && B.client && B.client.series[k];
+      const ser = [{name: 'A', color: css('--s1'), vals: s.hist.map(h => h[2])}];
+      if (sb && sb.hist.length === s.hist.length) ser.push({name: 'B', color: css('--s2'), vals: sb.hist.map(h => h[2]), opacity: .8});
+      barChart(cb.c, s.hist.map(h => fmt(h[0], 0)), ser, {h: 160, rot: 1, vfmt: v => fmt(v, 0), extra: i => `<br><span class=m>[${fmt(s.hist[i][0], 1)}, ${fmt(s.hist[i][1], 1)})${sb ? ' · B 的分箱边界可能不同' : ''}</span>`});
+    }
+    const pk = ['1.0', '10.0', '50.0', '90.0', '95.0', '99.0', '99.9'];
+    const rows = [];
+    for (const run of both) for (const [k, lab] of keys) { const s = run.client && run.client.series[k]; if (s) rows.push([`${run === A ? 'A' : 'B'} · ${lab}`, fmt(s.mean, 1), ...pk.map(p => fmt(s.pct[p], 1))]); }
+    host.append(el('h3', null, '分位数'));
+    table(host, ['指标', '均值', ...pk.map(p => 'p' + p.replace('.0', ''))], rows);
+  }
+  host.append(el('h3', null, '服务端逐请求生命周期'));
+  const hk = A.hook && A.hook.requests;
+  if (!hk) { host.append(pend('排队 → 首次调度 → 首 token → 完成（每请求，按 rank）', '用 <code>sched/hook</code> 采集：<code>ATOM_DASH_DIR=…/dash ATOM_DASH_REQ=1</code>。现有日志只有到达时间（秒级），且 prefill 调度行不带 rank。')); return; }
+  const RC = Object.fromEntries(A.hook.requests_cols.map((c, i) => [c, i]));
+  const rq = hk;
+  if (!hk.some(x => x[RC.arrive])) host.append(el('div', {class: 'src', html: 'seq.arrive_time 在引擎核进程里为空：排队段无法计算，只给 prefill / decode 段。'}));
+  const q = rq.map(x => x[RC.first_sched] && x[RC.arrive] ? (x[RC.first_sched] - x[RC.arrive]) * 1e3 : null), pf = rq.map(x => x[RC.first_tok] && x[RC.first_sched] ? (x[RC.first_tok] - x[RC.first_sched]) * 1e3 : null), dec = rq.map(x => x[RC.leave] && x[RC.first_tok] ? (x[RC.leave] - x[RC.first_tok]) * 1e3 : null);
+  const tiles = el('div', {class: 'tiles'}); host.append(tiles);
+  [['排队（到达→首次调度）p50 ms', median(q)], ['prefill（首次调度→首 token）p50 ms', median(pf)], ['decode（首 token→完成）p50 ms', median(dec)], ['请求数', rq.length]].forEach(([k, v]) => tiles.append(el('div', {class: 'tile'}, el('div', {class: 'v'}, fmt(v, 0)), el('div', {class: 'k'}, k))));
+  const n = nRanks(A), per = [...Array(n).keys()].map(r => rq.filter(x => x[RC.rank] === r));
+  const cb = chartBox(host, '各 rank 生命周期中位数（ms）');
+  barChart(cb.c, per.map((_, r) => 'rank ' + r), [{name: '排队', color: css('--gap'), vals: per.map(a => median(a.map(x => x[RC.first_sched] && x[RC.arrive] ? (x[RC.first_sched] - x[RC.arrive]) * 1e3 : null)) || 0)}, {name: 'prefill', color: css('--pf'), vals: per.map(a => median(a.map(x => x[RC.first_tok] && x[RC.first_sched] ? (x[RC.first_tok] - x[RC.first_sched]) * 1e3 : null)) || 0)}], {stacked: true, h: 170});
+}
+
+function renderAdmit(A, B) {
+  const host = $('#admitBody'); host.innerHTML = '';
+  const L = A.log, base = baseT(A);
+  host.append(el('div', {class: 'src', html: `A 的放行策略：<b>${A.meta.admit || '未知'}</b>；delayer 日志区间 ${L.delayer.length} 个（每区间 1000 次决策）。`}));
+  if (!L.delayer.length) host.append(pend('server.log 无 [PrefillDelayer stats] 行'));
+  else {
+    const DC = Object.fromEntries(L.delayer_cols.map((c, i) => [c, i]));
+    const dl = L.delayer.filter(x => inWin(x[0] - base));
+    const keys = [['fire_fill', 'fill', '--s3'], ['fire_stall', 'stall', '--s4'], ['fire_cost', 'cost', '--s5'], ['fire_ttft', 'ttft', '--s8'], ['fire_kv', 'kv', '--s7'], ['fire_partial', 'partial', '--s6'], ['fire_nodecode', 'nodecode', '--s1'], ['fire_queue_ms', 'queue_ms', '--s2'], ['fire_vacuous', 'vacuous（无 prefill）', '--dummy']];
+    const ad = L.adaptive.filter(x => inWin(x[0] - base));
+    const cats = dl.map(x => '+' + (x[0] - base).toFixed(0) + 's');
+    const ser = keys.map(([k, lab, c]) => ({name: lab, color: `var(${c})`, vals: dl.map(x => x[DC[k]])})).filter(s => sum(s.vals) > 0);
+    // adaptive fires (cumulative deltas on the adaptive line) aligned by time
+    if (ad.length) { const m = dl.map(x => { const a = ad.find(y => Math.abs(y[0] - x[0]) < 2); return a ? a[1] + a[2] : 0; }); if (sum(m)) ser.unshift({name: 'adaptive（含 cap）', color: css('--csa'), vals: m}); }
+    const cb = chartBox(host, '每区间 FIRE 次数构成（按原因）', '一个区间 = 1000 次锁步决策；其余为 hold');
+    legend(cb.box, ser.map(s => ({name: s.name, color: s.color, box: 1})));
+    barChart(cb.c, cats, ser, {stacked: true, h: 200, rot: 1, vfmt: v => fmt(v, 0)});
+    const g = el('div', {class: 'grid2'}); host.append(g);
+    const c2 = chartBox(g, 'hold 比例（每区间）', '');
+    lineChart(c2.c, [{name: 'hold %', color: css('--hca'), pts: dl.map(x => [x[0] - base, (x[DC.hold] + x[DC.hold_decode_interval]) / x[DC.ticks] * 100])}], {h: 170, xLabel: 's', yMin: 0, yMax: 100, brush: setWin, yfmt: v => (+v).toFixed(1)});
+    if (ad.length) {
+      const c3 = chartBox(g, 'adaptive 拟合：T0 / A（ms）与每轮 hold 拍数', 'T0=0.75×decode 步均值；A=prefill 固定开销（截断到 0.3–1.5×均值）');
+      legend(c3.box, [{name: 'T0 ms', color: css('--dc')}, {name: 'A ms', color: css('--pf')}, {name: 'hold 拍/轮', color: css('--hca')}, {name: 'max_ticks', color: css('--muted'), dash: 1}]);
+      lineChart(c3.c, [{name: 'T0 ms', color: css('--dc'), pts: ad.map(x => [x[0] - base, x[4] / 1e3])}, {name: 'A ms', color: css('--pf'), pts: ad.map(x => [x[0] - base, x[5] / 1e3])}, {name: 'hold 拍/轮（累计均值）', color: css('--hca'), pts: (L.hold_ticks_per_cycle || []).map(x => [x[0] - base, x[1]]).filter(p => inWin(p[0]))}, {name: 'max_ticks', color: css('--muted'), dash: 1, pts: ad.map(x => [x[0] - base, x[3]])}], {h: 170, xLabel: 's', brush: setWin});
+    }
+  }
+  const bl = L.balance || [];
+  if (bl.length) { const c4 = chartBox(host, 'DP prefill 成本均衡（prefill cost balance）：每 50 步平均 token / own÷target 成本', '各 rank 行混在一起'); lineChart(c4.c, [{name: 'own/target', color: css('--s7'), pts: bl.map(x => [x[0] - base, x[2]]).filter(p => inWin(p[0])), dots: 1}], {h: 140, xLabel: 's', brush: setWin, yfmt: v => (+v).toFixed(3)}); }
+  host.append(el('h3', null, '逐次决策（hook）'));
+  const H = A.hook && A.hook.delayer;
+  if (!H) { host.append(pend('每次 FIRE/HOLD 的原因、hold 拍数、全局待放行 token、prefillable rank 数、blocked/unreachable、adaptive 的 regret/阈值', '<code>ATOM_DASH_DIR=…/dash ATOM_DASH_DELAYER=1</code>（默认随 ATOM_DASH_DIR 打开）。')); return; }
+  const C = Object.fromEntries(A.hook.delayer_cols.map((c, i) => [c, i]));
+  const rows = H.filter(x => inWin(x[0] - base));
+  const rs = {}; rows.forEach(x => rs[x[C.reason]] = (rs[x[C.reason]] || 0) + 1);
+  const cb = chartBox(host, '决策原因计数', `共 ${rows.length} 次`);
+  const ks = Object.keys(rs).sort((a, b) => rs[b] - rs[a]);
+  barChart(cb.c, ks, [{name: '次数', color: css('--csa'), vals: ks.map(k => rs[k])}], {h: 150, vfmt: v => fmt(v, 0)});
+  const fires = rows.filter(x => x[C.allow] && x[C.reason] !== 'vacuous');
+  const c5 = chartBox(host, 'FIRE 时：已 hold 拍数 与 全局待放行 token', '点=一次放行');
+  legend(c5.box, [{name: 'hold 拍数', color: css('--hca')}, {name: '待放行 token / 1000', color: css('--pf')}]);
+  lineChart(c5.c, [{name: 'hold 拍数', color: css('--hca'), dots: 1, pts: fires.map(x => [x[0] - base, x[C.hold_ticks], x[C.reason]])}, {name: '待放行 token/1000', color: css('--pf'), dots: 1, pts: fires.map(x => [x[0] - base, x[C.pending] / 1000])}], {h: 180, xLabel: 's', brush: setWin});
+  const c6 = chartBox(host, '每拍 prefillable rank 数（全局）与 delayer 决策耗时 ms（含 gloo all_reduce）');
+  lineChart(c6.c, [{name: 'prefillable ranks', color: css('--s3'), pts: rows.map(x => [x[0] - base, x[C.n_prefillable]]), step: 1}, {name: '决策 ms', color: css('--s2'), pts: rows.map(x => [x[0] - base, x[C.ms]])}], {h: 170, xLabel: 's', brush: setWin});
+}
+
+function renderMoE(A) {
+  const host = $('#moeBody'); host.innerHTML = '';
+  const M = A.hook && A.hook.moe;
+  if (!M) {
+    host.append(pend('层 × 专家选择热力图、每 EP rank dispatch token、最热/最冷专家、max/mean 随时间',
+      '现有 trace / 日志里都没有专家选择。用 <code>sched/hook</code> 的 MoE 采集：<code>ATOM_DASH_DIR=…/dash ATOM_DASH_MOE=1 ATOM_DASH_MOE_EVERY=8</code>。' +
+      '它包住 <code>deepseek_v41.moe.MoE._topk</code>：eager（prefill）当场在 GPU 上 bincount；decode 的 CUDA graph 在捕获时登记 topk ids 缓冲区，' +
+      '每次回放后（<code>ModelRunner.run_model</code> 返回）按 1/N 采样在图外对这块缓冲区做 bincount，异步拷回、每 5 s 写一行 jsonl，不做 host 同步。' +
+      'EP rank 的负载按 ATOM 的整块专家分配（专家 j 属于 rank ⌊j/(E/ep)⌋）推出。'));
+    return;
+  }
+  const ph = Object.keys(M.total);
+  if (!S.moePh || !ph.includes(S.moePh)) S.moePh = ph.includes('decode') ? 'decode' : ph[0];
+  const ctl = el('div', {class: 'ctl'}, '阶段 ');
+  ph.forEach(p => { const b = el('button', {class: p === S.moePh ? 'on' : ''}, p); b.onclick = () => { S.moePh = p; renderMoE(A); }; ctl.append(b); });
+  ctl.append(el('span', {class: 'brushhint'}, `采样 1/${M.every} 步 · EP=${M.ep_size} · 图回放未命中 ${M.graph_miss} 次 · 专家归属：${M.owner}`));
+  host.append(ctl);
+  if (M.graph_miss > 0) host.append(el('div', {class: 'src warn', html: `本运行 decode 走 CUDA graph 回放且 hook 在服务就绪后才开启（启动期不改任何东西），图捕获时没有登记 topk 缓冲区，所以 <b>decode 的专家选择未采到</b>（图回放未命中 ${M.graph_miss} 次）；下面只有 eager 前向（prefill）的统计${M.layers && M.layers.length < 40 ? `，且只覆盖 L${M.layers[0]}–L${M.layers.at(-1)}（解码器层 prefill 只跑尾部行、走编译图）` : ''}。`}));
+  const T = M.total[S.moePh], layers = M.layers || T.map((_, i) => i);
+  const E = T[0].length, per = Math.floor(E / M.ep_size);
+  const cb = chartBox(host, `层 × 专家 token 计数（${S.moePh}，全部 rank 合计）`, '颜色越深越热；下方横条是 EP rank 的专家分段');
+  heatmap(cb.c, T, {rowLabel: i => 'L' + layers[i], colBands: [...Array(M.ep_size).keys()].map(r => [r * per, r === M.ep_size - 1 ? E : (r + 1) * per, 'EP' + r]), tip: (i, j, v, mx) => { const s = sum(T[i]); return `<b>L${layers[i]} · 专家 ${j}</b>（EP rank ${Math.min(M.ep_size - 1, Math.floor(j / per))}）<br>token 选择数 <b>${fmt(v, 0)}</b> · 本层占比 ${(v / s * 100).toFixed(2)}% · 均匀时 ${(100 / E).toFixed(2)}%`; }});
+  // per-layer imbalance, hottest/coldest
+  const rowsT = T.map((r, i) => { const s = sum(r), m = s / r.length, mx = Math.max(...r), mn = Math.min(...r); const hot = r.map((v, j) => [v, j]).sort((a, b) => b[0] - a[0]).slice(0, 3); const dst = [...Array(M.ep_size).keys()].map(d => sum(r.slice(d * per, d === M.ep_size - 1 ? E : (d + 1) * per))); const dm = mean(dst); return ['L' + layers[i], fmt(s, 0), fmt(mx / m, 2), hot.map(h => `${h[1]}(${(h[0] / s * 100).toFixed(1)}%)`).join(' '), fmt(mn, 0), r.filter(v => v === 0).length, fmt(Math.max(...dst) / dm, 3)]; });
+  host.append(el('h3', null, '每层：不均系数与最热专家'));
+  table(host, ['层', '选择数', '专家 max/mean', '最热 3 个（占比）', '最冷计数', '零命中专家数', 'EP rank max/mean'], rowsT, {maxH: '300px'});
+  const g = el('div', {class: 'grid2'}); host.append(g);
+  const sd = M.src_dst[S.moePh];
+  const c2 = chartBox(g, '每 EP rank 收到的 token·专家对（dispatch 负载，按来源 rank 堆叠）');
+  legend(c2.box, sd.map((_, s) => ({name: '来自 rank ' + s, color: rc(s), box: 1})));
+  barChart(c2.c, [...Array(M.ep_size).keys()].map(d => 'EP' + d), sd.map((row, s) => ({name: '来自 rank ' + s, color: rc(s), vals: row})), {stacked: true, h: 190, vfmt: v => fmt(v, 0)});
+  const sr = (M.series[S.moePh] || []);
+  const SC = Object.fromEntries(M.series_cols.map((c, i) => [c, i]));
+  const base = baseT(A);
+  const c3 = chartBox(g, '每窗口：层平均专家 max/mean（按来源 rank）', '5 s 一个窗口');
+  lineChart(c3.c, [...new Set(sr.map(x => x[SC.rank]))].filter(r => S.ranks[r] !== false).map(r => ({name: 'rank ' + r, color: rc(r), pts: sr.filter(x => x[SC.rank] === r).map(x => [x[SC.t] - base, x[SC.imb_mean]])})), {h: 190, xLabel: 's', brush: setWin, yfmt: v => (+v).toFixed(2)});
+  // dispatch load imbalance over time (sum over source ranks per window time)
+  const byT = {}; for (const x of sr) { const k = Math.round(x[SC.t]); (byT[k] = byT[k] || Array(M.ep_size).fill(0)); x[SC.dst_load].forEach((v, d) => byT[k][d] += v); }
+  const c4 = chartBox(host, 'EP dispatch 负载 max/mean 随时间', '同一时刻（±0.5 s）各来源 rank 的窗口相加');
+  lineChart(c4.c, [{name: 'EP max/mean', color: css('--pf'), pts: Object.entries(byT).map(([t, v]) => [t - base, Math.max(...v) / mean(v)]).sort((a, b) => a[0] - b[0])}], {h: 160, xLabel: 's', brush: setWin, yfmt: v => (+v).toFixed(3)});
+}
+
+function renderSpec(A, B) {
+  const host = $('#specBody'); host.innerHTML = '';
+  const L = A.log, base = baseT(A);
+  const mt = (L.mtp || []).filter(x => inWin(x[0] - base));
+  if (!mt.length) host.append(pend('server.log 无 [MTP Stats Interval] 行'));
+  else {
+    const k = Math.max(...mt.map(x => x[4].length));
+    const agg = Array(k).fill(0); let nfwd = 0;
+    for (const x of mt) { const n = x[3] / (k - 1); nfwd += n; x[4].forEach((p, i) => agg[i] += p / 100 * n); }
+    const g = el('div', {class: 'grid2'}); host.append(g);
+    const cb = chartBox(g, '每次验证接受的草稿 token 数分布', `${mt.length} 个区间合计 · 平均接受 ${fmt(sum(agg.map((v, i) => v * i)) / nfwd, 3)} 个/次（每步产出 = 接受 + 1）`);
+    const ser = [{name: 'A', color: css('--draft'), vals: agg.map(v => v / nfwd * 100)}];
+    if (B && B.log && B.log.mtp.length) { const bm = B.log.mtp, ag2 = Array(k).fill(0); let n2 = 0; for (const x of bm) { const n = x[3] / (k - 1); n2 += n; x[4].forEach((p, i) => ag2[i] += p / 100 * n); } ser.push({name: 'B', color: css('--s2'), vals: ag2.map(v => v / n2 * 100), opacity: .8}); legend(cb.box, [{name: 'A', color: css('--draft'), box: 1}, {name: 'B', color: css('--s2'), box: 1}]); }
+    barChart(cb.c, agg.map((_, i) => String(i)), ser, {h: 170, yLabel: '%', vfmt: v => (+v).toFixed(1) + '%'});
+    const c2 = chartBox(g, '接受率与每次前向产出 token（区间，各 rank 混合）');
+    legend(c2.box, [{name: '接受率 %', color: css('--draft')}, {name: '产出 tok/fwd ×10', color: css('--s3')}]);
+    lineChart(c2.c, [{name: '接受率 %', color: css('--draft'), pts: mt.map(x => [x[0] - base, x[2] / x[3] * 100]), dots: 1, r: 1.6}, {name: 'tok/fwd×10', color: css('--s3'), pts: mt.map(x => [x[0] - base, x[1] * 10]), dots: 1, r: 1.6}], {h: 170, xLabel: 's', brush: setWin});
+  }
+  const T = A.trace;
+  if (T) {
+    const C = Object.fromEntries(T.cols.map((c, i) => [c, i]));
+    const dec = T.ranks.flat().filter(x => x[C.phase] === 'decode');
+    const spec = dec.length ? (dec[0][C.tok] / dec[0][C.bs]) : null;
+    host.append(el('div', {class: 'src', html: `trace：decode 每步每请求验证 ${spec ? fmt(spec, 0) : '–'} 个位置（anchor + ${spec ? spec - 1 : '–'} 个草稿），草稿宽度固定（<code>propose_dspark[... T=5]</code>）；DSpark 草稿 GPU 时长中位数 ${fmt(median(dec.map(x => x[C.gpu_draft])), 2)} ms/步。`}));
+  }
+  host.append(el('h3', null, '逐步接受（hook）'));
+  if (!(A.hook && A.hook.accept_hist)) host.append(pend('每步、每 rank 的接受长度直方图', '<code>ATOM_DASH_STEPS=1</code>（包住 EngineStats.update_spec，每拍汇总）。'));
+  else { const h = A.hook.accept_hist; const cb = chartBox(host, '接受长度（hook，全部步）'); barChart(cb.c, h.map((_, i) => String(i)), [{name: '次数', color: css('--draft'), vals: h}], {h: 150, vfmt: v => fmt(v, 0)}); }
+}
+
+function renderSteps(A) {
+  const host = $('#stepBody'); host.innerHTML = '';
+  const H = A.hook && A.hook.steps;
+  if (!H) { host.append(pend('引擎核每拍的 DP 同步 / 调度 / delayer / 前向 / 输出处理 / 其它 时间，及 running、waiting、KV、放行决策', '<code>ATOM_DASH_DIR=…/dash</code>（ATOM_DASH_STEPS 默认开）。现有 trace 只覆盖 model runner 进程，引擎核这部分只能看到“两次 forward 之间的空白”。')); return; }
+  const C = Object.fromEntries(A.hook.steps_cols.map((c, i) => [c, i]));
+  const base = baseT(A) || Math.min(...Object.values(H).map(r => r[0]?.[0] ?? Infinity));
+  const parts = [['sync_ms', 'DP 同步', '--s7'], ['sched_ms', '调度(含 delayer)', '--s4'], ['fwd_ms', '前向', '--dc'], ['dummy_ms', 'dummy 前向', '--dummy'], ['post_ms', '输出处理', '--s3'], ['other_ms', '其它', '--muted']];
+  const ranks = Object.keys(H).map(Number).filter(r => S.ranks[r] !== false);
+  const rowsT = ranks.map(r => { const rows = H[r].filter(x => inWin(x[C.t] - base)); const tot = sum(rows.map(x => x[C.total_ms])); return [`<span style="color:${rc(r)}">rank ${r}</span>`, rows.length, rows.filter(x => x[C.kind] === 'F').length, rows.filter(x => x[C.kind] === 'D').length, ...parts.map(p => tot ? (sum(rows.map(x => x[C[p[0]]])) / tot * 100).toFixed(1) + '%' : '–'), fmt(median(rows.map(x => x[C.total_ms])), 2), fmt(median(rows.map(x => x[C.delayer_ms])), 3)]; });
+  table(host, ['rank', '拍数', '真实前向', 'dummy', ...parts.map(p => p[1] + ' 占比'), '每拍中位 ms', 'delayer 中位 ms'], rowsT);
+  const r0 = ranks[0]; if (r0 == null) return;
+  let rows = H[r0].filter(x => inWin(x[C.t] - base));
+  const step = Math.max(1, Math.ceil(rows.length / 400)); const sel = rows.filter((_, i) => i % step === 0);
+  const cb = chartBox(host, `rank ${r0} 每拍时间分解（ms）`, rows.length > 400 ? `抽样每 ${step} 拍取 1；拖动上方折线图缩小时间窗可看全部` : '');
+  legend(cb.box, parts.map(p => ({name: p[1], color: `var(${p[2]})`, box: 1})));
+  barChart(cb.c, sel.map(x => '+' + (x[C.t] - base).toFixed(2) + 's'), parts.map(p => ({name: p[1], color: `var(${p[2]})`, vals: sel.map(x => x[C[p[0]]])})), {stacked: true, h: 210, extra: i => `<br><span class=m>${sel[i][C.kind]} p=${sel[i][C.p_seqs] ?? 0}/${sel[i][C.p_toks] ?? 0}tok d=${sel[i][C.d_seqs] ?? 0} · ${sel[i][C.admit_reason] || ''}</span>`});
+  const c2 = chartBox(host, '每拍 running / waiting / KV%（各 rank）');
+  lineChart(c2.c, ranks.flatMap(r => [{name: `r${r} running`, color: rc(r), pts: H[r].filter(x => inWin(x[C.t] - base)).map(x => [x[C.t] - base, x[C.running]])}, {name: `r${r} waiting`, color: rc(r), dash: 1, pts: H[r].filter(x => inWin(x[C.t] - base)).map(x => [x[C.t] - base, x[C.waiting]])}]), {h: 190, xLabel: 's', brush: setWin});
+}
+
+function renderSrc(A) {
+  const host = $('#srcBody'); host.innerHTML = '';
+  const items = [
+    ['数据', D.demo ? '<b class="warn">示例数据（合成），非真实测量</b>：数值由随机数和简单模型生成' : '本地文件：' + (D.files || []).join('、') + '（只在浏览器内读取）'],
+    ['生成时间', D.generated_bjt + (D.demo ? '' : '（北京时间）')],
+    ['A 目录', A.meta.dir], ['机器', A.meta.machine || '–'], ['日志日期', (A.meta.date_log || '–') + '；server.log 的 HH:MM:SS 按 UTC 解析，页面上统一显示北京时间（UTC+8）'],
+    ['服务命令', `<code>${(A.meta.server_cmd || '–').replace(/</g, '&lt;')}</code>`],
+    ['代码状态', `<code>${(A.meta.code_state || '–').replace(/\n/g, '<br>')}</code>`],
+    ['CPU span → Perfetto', (A.meta.perfetto || []).length ? A.meta.perfetto.map(f => `<code>${f}</code>`).join('<br>') + '<br>拖进 ui.perfetto.dev 打开（gzip 可直接拖）。' : '–'],
+    ['请求→rank 归属', `把 “Request N arrived, input tokens: T” 与随后同 token 数的 “Engine Core Mgr: add rankR” 配对：${A.log.rid_matched}/${A.log.requests.length} 条配上；prefill 批次靠其中的 req_ids 归属 rank，${A.log.prefill_batch_unattributed} 个批次归不了。`],
+    ['不在本页的', 'kernel 级耗时见 ../kernel/index.html。trace 的 GPU 区间来自 gpu_user_annotation，graph 回放下单 kernel 时长不可信，本页只用区间与并集。'],
+  ];
+  table(host, ['项', '内容'], items.map(([k, v]) => [k, v]));
+  host.querySelectorAll('td').forEach(td => { td.style.whiteSpace = 'normal'; td.style.textAlign = 'left'; });
+}
+
+function renderAll() {
+  if (!D.runs.length) { document.body.append(pend('没有运行数据：点“加载数据文件”选择本机的 sched_data.js / JSON')); return; }
+  const A = R($('#selA').value) || D.runs[0], B = $('#selB').value ? R($('#selB').value) : null;
+  rankButtons(nRanks(A));
+  $('#winTxt').textContent = S.win ? `+${S.win[0].toFixed(0)}–${S.win[1].toFixed(0)} s` : '全程';
+  const parts = [renderSummary, renderCPU, renderTimeline, renderDP, renderLoad, renderLife, renderAdmit, renderMoE, renderSpec, renderSteps, renderSrc];
+  for (const f of parts) { try { f(A, B); } catch (e) { console.error(f.name, e); const id = {renderSummary: 'tiles', renderCPU: 'cpuBody', renderTimeline: 'tlBody', renderDP: 'dpBody', renderLoad: 'loadBody', renderLife: 'lifeBody', renderAdmit: 'admitBody', renderMoE: 'moeBody', renderSpec: 'specBody', renderSteps: 'stepBody', renderSrc: 'srcBody'}[f.name]; const h = document.getElementById(id); if (h) h.append(el('div', {class: 'pending warn'}, `渲染出错：${e.message}`)); } }
+}
+setupHeader();
+renderAll();
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(renderAll, 200); });
+</script>
+</body>
+</html>

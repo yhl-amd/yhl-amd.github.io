@@ -1,0 +1,2225 @@
+{
+ "version": 2,
+ "generated_from": "示例映射（合成）：算子表结构同 DeepSeek-V4.1-Flash 算子调用图，kernel 名均为占位名",
+ "note": "示例映射：kernel 名 → (行, 算子, 模块) 规则全部是占位正则（kernel_<算子>），仅用于演示；峰值为虚构值。",
+ "model": {
+  "name": "DeepSeek-V4.1-Flash",
+  "hidden": 5120,
+  "n_layers": 40,
+  "n_draft": 3,
+  "vocab": 129280,
+  "n_heads": 64,
+  "head_dim": 512,
+  "q_latent": 1280,
+  "kv_latent": 512,
+  "index_heads": 32,
+  "index_dim": 128,
+  "n_routed_experts": 384,
+  "topk": 6,
+  "moe_inter": 2304,
+  "shared_inter": 2304,
+  "draft_tokens": 5
+ },
+ "arch": {
+  "gpu": {
+   "gpu": "示例 GPU",
+   "peak_tflops": {
+    "fp4": 2000,
+    "fp8": 1000,
+    "bf16": 500
+   },
+   "hbm_tbps": 5.0,
+   "peak_note": "示例峰值（虚构），不对应任何真实硬件"
+  }
+ },
+ "buckets": {
+  "decode_batch": "graph",
+  "batch_levels": [
+   1,
+   2,
+   4,
+   8,
+   16,
+   24,
+   32,
+   48,
+   64,
+   96,
+   128,
+   160,
+   192,
+   224,
+   256,
+   320,
+   384,
+   512,
+   768,
+   1024
+  ],
+  "prefill_tok_levels": [
+   128,
+   256,
+   512,
+   1024,
+   2048,
+   4096,
+   8192,
+   12288,
+   16384,
+   24576,
+   32768,
+   65536
+  ],
+  "kv_levels": [
+   512,
+   1024,
+   2048,
+   4096,
+   8192,
+   16384,
+   32768,
+   65536,
+   131072,
+   262144,
+   524288,
+   1048576
+  ]
+ },
+ "modules": [
+  [
+   "pro",
+   "前置：H2D / embedding / Engram",
+   "--c-pro"
+  ],
+  [
+   "attn",
+   "Attention",
+   "--c-attn"
+  ],
+  [
+   "moe",
+   "MoE / FFN",
+   "--c-moe"
+  ],
+  [
+   "comm",
+   "通信（AR / gather / dispatch / combine）",
+   "--c-comm"
+  ],
+  [
+   "epi",
+   "收尾：lm_head / 采样 / 验证",
+   "--c-epi"
+  ],
+  [
+   "dspark",
+   "DSpark 草稿",
+   "--c-dspark"
+  ],
+  [
+   "misc",
+   "辅助小 kernel",
+   "--c-misc"
+  ],
+  [
+   "other",
+   "未匹配",
+   "--c-other"
+  ]
+ ],
+ "classes": {
+  "fp8": "^kernel_gemm_fp8",
+  "bf16": "^kernel_gemm_bf16",
+  "quant": "^kernel_quant",
+  "rope": "^kernel_rope",
+  "rms": "^kernel_rmsnorm",
+  "ar": "^kernel_allreduce"
+ },
+ "markers": {
+  "half": "^kernel_mhc_pre$"
+ },
+ "layout": {
+  "grid": {
+   "groups": [
+    "pre",
+    "attn",
+    "ffn"
+   ]
+  },
+  "strips": {
+   "top": [
+    "pro"
+   ],
+   "bottom": [
+    "epi",
+    "dkv",
+    "dhd"
+   ]
+  },
+  "groupLabels": {
+   "pro": "prologue",
+   "pre": "层前置",
+   "attn": "attention 半层",
+   "ffn": "FFN 半层",
+   "epi": "epilogue：logits 与采样",
+   "dkv": "DSpark：写草稿 KV、准备草稿",
+   "dhd": "DSpark：草稿头"
+  },
+  "bands": {
+   "enc": "编码器 L0–19（m=2）",
+   "dec": "解码器 L20–39（m=1）",
+   "dft": "DSpark 草稿块（L40–42）"
+  },
+  "kinds": [
+   [
+    "swa",
+    "只有 SWA"
+   ],
+   [
+    "full2",
+    "Full m=2"
+   ],
+   [
+    "reuse2",
+    "Reuse m=2"
+   ],
+   [
+    "full1",
+    "Full m=1"
+   ],
+   [
+    "reindex",
+    "Reindex"
+   ],
+   [
+    "reuse1",
+    "Reuse m=1"
+   ],
+   [
+    "draft",
+    "草稿块"
+   ]
+  ]
+ },
+ "rows": [
+  {
+   "id": "L0",
+   "label": "L0",
+   "kind": "swa",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L1",
+   "label": "L1",
+   "kind": "swa",
+   "band": "enc",
+   "grid": true,
+   "note": "Engram"
+  },
+  {
+   "id": "L2",
+   "label": "L2",
+   "kind": "full2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L3",
+   "label": "L3",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L4",
+   "label": "L4",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L5",
+   "label": "L5",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L6",
+   "label": "L6",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L7",
+   "label": "L7",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L8",
+   "label": "L8",
+   "kind": "full2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L9",
+   "label": "L9",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L10",
+   "label": "L10",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L11",
+   "label": "L11",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L12",
+   "label": "L12",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L13",
+   "label": "L13",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L14",
+   "label": "L14",
+   "kind": "full2",
+   "band": "enc",
+   "grid": true,
+   "note": "Engram"
+  },
+  {
+   "id": "L15",
+   "label": "L15",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L16",
+   "label": "L16",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L17",
+   "label": "L17",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L18",
+   "label": "L18",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L19",
+   "label": "L19",
+   "kind": "reuse2",
+   "band": "enc",
+   "grid": true
+  },
+  {
+   "id": "L20",
+   "label": "L20",
+   "kind": "full1",
+   "band": "dec",
+   "grid": true,
+   "tail": true,
+   "note": "候选池；prefill 时 mHC 接缝和压缩跑全部行，其余只跑尾部 128 行"
+  },
+  {
+   "id": "L21",
+   "label": "L21",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L22",
+   "label": "L22",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L23",
+   "label": "L23",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L24",
+   "label": "L24",
+   "kind": "reindex",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L25",
+   "label": "L25",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L26",
+   "label": "L26",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L27",
+   "label": "L27",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L28",
+   "label": "L28",
+   "kind": "reindex",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L29",
+   "label": "L29",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L30",
+   "label": "L30",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L31",
+   "label": "L31",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L32",
+   "label": "L32",
+   "kind": "reindex",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L33",
+   "label": "L33",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L34",
+   "label": "L34",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L35",
+   "label": "L35",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L36",
+   "label": "L36",
+   "kind": "reindex",
+   "band": "dec",
+   "grid": true,
+   "tail": true
+  },
+  {
+   "id": "L37",
+   "label": "L37",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true,
+   "note": "DSpark 取 hidden"
+  },
+  {
+   "id": "L38",
+   "label": "L38",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true,
+   "note": "DSpark 取 hidden"
+  },
+  {
+   "id": "L39",
+   "label": "L39",
+   "kind": "reuse1",
+   "band": "dec",
+   "grid": true,
+   "tail": true,
+   "note": "DSpark 取 hidden；prefill 时 KV 写全部尾部行，query 只取每个请求的最后一行"
+  },
+  {
+   "id": "D0",
+   "label": "草稿块 0",
+   "kind": "draft",
+   "band": "dft",
+   "grid": true,
+   "note": "DSpark 草稿块：SWA + 块内双向 attention，MoE 128 专家选 3"
+  },
+  {
+   "id": "D1",
+   "label": "草稿块 1",
+   "kind": "draft",
+   "band": "dft",
+   "grid": true,
+   "note": "DSpark 草稿块：SWA + 块内双向 attention，MoE 128 专家选 3"
+  },
+  {
+   "id": "D2",
+   "label": "草稿块 2",
+   "kind": "draft",
+   "band": "dft",
+   "grid": true,
+   "note": "DSpark 草稿块：SWA + 块内双向 attention，MoE 128 专家选 3"
+  }
+ ],
+ "n_layers": 40,
+ "n_draft": 3,
+ "ops": [
+  {
+   "id": "pro.memcpy",
+   "group": "pro",
+   "label": "memcpy（H2D/D2D）",
+   "short": "memcpy",
+   "kinds": null,
+   "what": "gpu_memcpy 事件；H2D 在 graph 模式下常包含等待上一步/DP 同步的时间，默认不计入 kernel 总耗时",
+   "module": "pro",
+   "sub": "memcpy（H2D/D2D）",
+   "memcpy": true,
+   "match": "^kernel_memcpy(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.h2d",
+   "group": "pro",
+   "label": "元数据上传",
+   "short": "H2D 元数据",
+   "kinds": null,
+   "what": "positions、block table、压缩 plan、Engram 行等一次打包上传，再散到固定地址",
+   "module": "pro",
+   "sub": "H2D 元数据",
+   "match": "^kernel_h2d(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.fill_ids",
+   "group": "pro",
+   "label": "拼 decode 输入",
+   "short": "填 decode id",
+   "kinds": null,
+   "what": "每个请求的 [anchor, 5 个草稿 token]，来自上一步的采样与草稿",
+   "module": "pro",
+   "sub": "H2D 元数据",
+   "phases": [
+    "decode"
+   ],
+   "match": "^kernel_fill_ids(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.mono",
+   "group": "pro",
+   "label": "mono 步开始（旧 trace）",
+   "short": "mono 元数据",
+   "kinds": null,
+   "what": "只有 mono 融合 decode 才有；本配置（EP）不走 mono",
+   "module": "pro",
+   "sub": "步元数据",
+   "opt": true,
+   "match": "^kernel_mono(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.meta",
+   "group": "pro",
+   "label": "步级元数据（旧 trace）",
+   "short": "步元数据",
+   "kinds": null,
+   "what": "新代码在 L0 的 attention 里按需启动（算在 attn 的索引元数据）",
+   "module": "pro",
+   "sub": "步元数据",
+   "opt": true,
+   "match": "^kernel_meta(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.embed",
+   "group": "pro",
+   "label": "token embedding",
+   "short": "embedding",
+   "kinds": null,
+   "what": "按词表分片取行，分片外置 0",
+   "module": "pro",
+   "sub": "embedding",
+   "match": "^kernel_embed(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.embed_ar",
+   "group": "pro",
+   "label": "embedding all-reduce",
+   "short": "emb AR",
+   "kinds": null,
+   "what": "TP4 合并词表分片",
+   "module": "comm",
+   "sub": "embedding AR",
+   "match": "^kernel_embed_ar(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.eng_compress",
+   "group": "pro",
+   "label": "Engram：token 压缩",
+   "short": "Eng 压缩",
+   "kinds": null,
+   "what": "原始 token id → 压缩 id（99,092 种）",
+   "module": "pro",
+   "sub": "Engram",
+   "match": "^kernel_eng_compress(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.eng_snapshot",
+   "group": "pro",
+   "label": "Engram：快照与游标",
+   "short": "Eng 快照",
+   "kinds": null,
+   "what": "每个 token 的 3 个回看 id；prefill 推进游标",
+   "module": "pro",
+   "sub": "Engram",
+   "match": "^kernel_eng_snapshot(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.eng_hash",
+   "group": "pro",
+   "label": "Engram：n-gram 哈希 ×2",
+   "short": "Eng 哈希",
+   "kinds": null,
+   "what": "L1、L14 各一次：n=2,3,4 × 8 head → 24 个表行号",
+   "module": "pro",
+   "sub": "Engram",
+   "match": "^kernel_eng_hash(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.eng_uva",
+   "group": "pro",
+   "label": "Engram：host 表直读 ×2",
+   "short": "Eng UVA 查表",
+   "kinds": null,
+   "what": "从 pinned host 内存直接读本 rank 的 6 个 head（FP8+scale），反量化成 bf16",
+   "module": "pro",
+   "sub": "Engram",
+   "match": "^kernel_eng_uva(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.eng_gather",
+   "group": "pro",
+   "label": "Engram：TP all-gather ×2",
+   "short": "Eng gather",
+   "kinds": null,
+   "what": "4 个 rank 的 head 拼回 [T,6144]",
+   "module": "comm",
+   "sub": "Engram gather",
+   "match": "^kernel_eng_gather(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pro.misc",
+   "group": "pro",
+   "label": "辅助 kernel",
+   "short": "辅助",
+   "kinds": null,
+   "what": "PyTorch 小 kernel：mHC 4 路残差初始化（expand+copy）、清零、index 等",
+   "module": "misc",
+   "sub": "前置辅助",
+   "match": "^kernel_misc(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pre.settle",
+   "group": "pre",
+   "label": "结清上一层 FFN 的 mHC post",
+   "short": "mHC post",
+   "kinds": null,
+   "what": "Engram 和 DSpark 取数都要读结清后的残差",
+   "module": "attn",
+   "sub": "mHC",
+   "rows": [
+    "L1",
+    "L14",
+    "L37",
+    "L38",
+    "L39"
+   ],
+   "match": "^kernel_settle(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pre.eng_wkv",
+   "group": "pre",
+   "label": "Engram：wkv GEMM（含输入量化）",
+   "short": "Eng wkv",
+   "kinds": null,
+   "what": "[T,6144] × [25600,6144]ᵀ：4 个 key + 1 个 value",
+   "module": "pro",
+   "sub": "Engram",
+   "rows": [
+    "L1",
+    "L14"
+   ],
+   "match": "^kernel_eng_wkv(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pre.eng_gate",
+   "group": "pre",
+   "label": "Engram：门控并加回残差",
+   "short": "Eng 门控",
+   "kinds": null,
+   "what": "每个 (token, 残差流) 一个门：out = r + g·v",
+   "module": "pro",
+   "sub": "Engram",
+   "rows": [
+    "L1",
+    "L14"
+   ],
+   "match": "^kernel_eng_gate(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "pre.misc",
+   "group": "pre",
+   "label": "辅助 kernel",
+   "short": "辅助",
+   "kinds": null,
+   "what": "L37–39：DSpark 取数 hook 的 mean + copy（把 hidden 存进固定 buffer）",
+   "module": "misc",
+   "sub": "层前置辅助",
+   "rows": [
+    "L1",
+    "L14",
+    "L37",
+    "L38",
+    "L39"
+   ],
+   "match": "^kernel_misc(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.mono_pre",
+   "group": "attn",
+   "label": "mono K1：v41_attn_pre（旧 trace）",
+   "short": "mono K1",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "mono 把 mHC、wqkv_a、q/kv norm、RoPE、wq_b、index query 融成一个 kernel；本配置不走",
+   "module": "attn",
+   "sub": "mono 融合",
+   "phases": [
+    "decode"
+   ],
+   "opt": true,
+   "match": "^kernel_mono_pre(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.mhc_pre",
+   "group": "attn",
+   "label": "mHC 接缝 + attn_norm",
+   "short": "mHC 接缝",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "上一个子层欠的 post、4 路混合系数、Sinkhorn×20、合成输入、RMSNorm，并量化成 MXFP8",
+   "module": "attn",
+   "sub": "mHC",
+   "match": "^kernel_mhc_pre(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.kv_compress_proj",
+   "group": "attn",
+   "label": "压缩器投影 wkv/wgate",
+   "short": "压缩 投影",
+   "kinds": [
+    "full2",
+    "full1"
+   ],
+   "what": "m=2：[T,5120]→[T,1024] fp32（wkv|wgate）；m=1：→[T,512] bf16",
+   "module": "attn",
+   "sub": "压缩器 compressor",
+   "est": {
+    "kind": "gemm",
+    "k": 5120,
+    "n": 1024,
+    "w_bits": 16,
+    "a_bits": 16,
+    "rows": "T",
+    "shard": null,
+    "note": "m=2: [T,5120]→[T,1024]；m=1 为 512（按 1024 估，偏高）"
+   },
+   "match": "^kernel_kv_compress_proj(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.kv_compress",
+   "group": "attn",
+   "label": "压缩：组内加权 + norm + RoPE",
+   "short": "压缩",
+   "kinds": [
+    "full2",
+    "full1"
+   ],
+   "what": "m=2 两个 token 按 gate softmax 合成一条；RMSNorm、RoPE",
+   "module": "attn",
+   "sub": "压缩器 compressor",
+   "match": "^kernel_kv_compress(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.compress_state",
+   "group": "attn",
+   "label": "压缩器尾部状态",
+   "short": "压缩 状态",
+   "kinds": [
+    "full2",
+    "full1"
+   ],
+   "what": "把本次的原始投影写进 STATE 环（m=2 未凑满的组）",
+   "module": "attn",
+   "sub": "压缩器 compressor",
+   "match": "^kernel_compress_state(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.kv_main_quant",
+   "group": "attn",
+   "label": "主 KV 量化",
+   "short": "主KV 量化",
+   "kinds": [
+    "full2",
+    "full1"
+   ],
+   "what": "压缩后的 latent → MXFP8 行",
+   "module": "attn",
+   "sub": "压缩器 compressor",
+   "match": "^kernel_kv_main_quant(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.kv_main_scatter",
+   "group": "attn",
+   "label": "主 KV 写入页",
+   "short": "主KV 写页",
+   "kinds": [
+    "full2",
+    "full1"
+   ],
+   "what": "按压缩 plan 把行写进本 owner 的 PAGE（前面有几个 torch 地址计算 kernel，算在辅助里）",
+   "module": "attn",
+   "sub": "压缩器 compressor",
+   "match": "^kernel_kv_main_scatter(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_key_proj",
+   "group": "attn",
+   "label": "index K 投影",
+   "short": "idxK 投影",
+   "kinds": [
+    "full2",
+    "full1"
+   ],
+   "what": "indexer.wk：[T,512] → [T,128]",
+   "module": "attn",
+   "sub": "indexer 投影",
+   "match": "^kernel_index_key_proj(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_key_norm",
+   "group": "attn",
+   "label": "index K norm",
+   "short": "idxK norm",
+   "kinds": [
+    "full2",
+    "full1"
+   ],
+   "what": "k_norm RMSNorm(128)",
+   "module": "attn",
+   "sub": "indexer 投影",
+   "match": "^kernel_index_key_norm(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_key_rope",
+   "group": "attn",
+   "label": "index K RoPE",
+   "short": "idxK RoPE",
+   "kinds": [
+    "full2",
+    "full1"
+   ],
+   "what": "key 的 RoPE 维",
+   "module": "attn",
+   "sub": "indexer 投影",
+   "match": "^kernel_index_key_rope(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_key_write",
+   "group": "attn",
+   "label": "index K 写入",
+   "short": "idxK 写入",
+   "kinds": [
+    "full2",
+    "full1"
+   ],
+   "what": "FP8 key + 2 的幂 scale，预 shuffle 后写进 index plane",
+   "module": "attn",
+   "sub": "indexer 投影",
+   "match": "^kernel_index_key_write(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.tail_gather",
+   "group": "attn",
+   "label": "取尾部行",
+   "short": "取尾部行",
+   "kinds": null,
+   "what": "L20：把每个 prompt 最后 128 行的输入和 mHC 状态取出来；L39：只取每个请求的最后一行做 query",
+   "module": "attn",
+   "sub": "SWA 窗口 / 尾部行",
+   "phases": [
+    "prefill"
+   ],
+   "rows": [
+    "L20",
+    "L39"
+   ],
+   "match": "^kernel_tail_gather(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.wqkv_a",
+   "group": "attn",
+   "label": "wqkv_a：Q/KV 低秩投影",
+   "short": "wqkv_a",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "[T,5120] FP8 → [T,1280 | 512]",
+   "module": "attn",
+   "sub": "QKV 投影",
+   "est": {
+    "kind": "gemm",
+    "k": 5120,
+    "n": 1792,
+    "w_bits": 8,
+    "a_bits": 8,
+    "rows": "T",
+    "shard": null,
+    "note": "[T,5120]→[T,1280|512]（q latent | kv latent）"
+   },
+   "match": "^kernel_wqkv_a(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.qk_norm",
+   "group": "attn",
+   "label": "q_norm + kv_norm",
+   "short": "q/kv norm",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "q latent → MXFP8；kv latent → bf16，一次 launch",
+   "module": "attn",
+   "sub": "norm",
+   "match": "^kernel_qk_norm(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_q_proj",
+   "group": "attn",
+   "label": "index Q 投影",
+   "short": "idxQ 投影",
+   "kinds": [
+    "full2",
+    "full1",
+    "reindex"
+   ],
+   "what": "indexer.wq_b：[T,1280] → [T,32×128]",
+   "module": "attn",
+   "sub": "indexer 投影",
+   "est": {
+    "kind": "gemm",
+    "k": 1280,
+    "n": 4096,
+    "w_bits": 8,
+    "a_bits": 8,
+    "rows": "T",
+    "shard": null,
+    "note": "[T,1280]→[T,32×128]"
+   },
+   "match": "^kernel_index_q_proj(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_weights_proj",
+   "group": "attn",
+   "label": "index 权重投影",
+   "short": "idx 权重",
+   "kinds": [
+    "full2",
+    "full1",
+    "reindex"
+   ],
+   "what": "weights_proj：每个 index head 一个权重",
+   "module": "attn",
+   "sub": "indexer 投影",
+   "match": "^kernel_index_weights_proj(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_q_rope",
+   "group": "attn",
+   "label": "index Q RoPE",
+   "short": "idxQ RoPE",
+   "kinds": [
+    "full2",
+    "full1",
+    "reindex"
+   ],
+   "what": "[T,32,128] 原地 RoPE",
+   "module": "attn",
+   "sub": "indexer 投影",
+   "match": "^kernel_index_q_rope(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_q_quant",
+   "group": "attn",
+   "label": "index Q 量化",
+   "short": "idxQ 量化",
+   "kinds": [
+    "full2",
+    "full1",
+    "reindex"
+   ],
+   "what": "FP8，每 (token, head) 一个 scale",
+   "module": "attn",
+   "sub": "indexer 投影",
+   "match": "^kernel_index_q_quant(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_weight_fold",
+   "group": "attn",
+   "label": "index 权重折算",
+   "short": "idx 折算",
+   "kinds": [
+    "full2",
+    "full1",
+    "reindex"
+   ],
+   "what": "weights × q_scale × 常数",
+   "module": "attn",
+   "sub": "indexer 投影",
+   "match": "^kernel_index_weight_fold(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_score",
+   "group": "attn",
+   "label": "indexer 打分",
+   "short": "idx 打分",
+   "kinds": [
+    "full2",
+    "full1",
+    "reindex"
+   ],
+   "what": "Full 层扫全部可见行；Reindex 层只扫 L20 圈出的 16,384 个候选位置；长 prefill 分多段",
+   "module": "attn",
+   "sub": "indexer 打分（MQA logits）",
+   "match": "^kernel_index_score(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.candidate_pick",
+   "group": "attn",
+   "label": "候选池：块最大值 + top-2048 块",
+   "short": "候选池",
+   "kinds": [
+    "full1"
+   ],
+   "what": "按 8 行一块取块内最高分，选 2048 块，供 L24/28/32/36 使用",
+   "module": "attn",
+   "sub": "indexer top-k / 候选池",
+   "match": "^kernel_candidate_pick(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_topk",
+   "group": "attn",
+   "label": "top-512",
+   "short": "top-512",
+   "kinds": [
+    "full2",
+    "full1",
+    "reindex"
+   ],
+   "what": "每个 query 选 512 个压缩行",
+   "module": "attn",
+   "sub": "indexer top-k / 候选池",
+   "match": "^kernel_index_topk(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.index_lift",
+   "group": "attn",
+   "label": "候选列还原成行号",
+   "short": "idx lift",
+   "kinds": [
+    "reindex"
+   ],
+   "what": "Reindex：把候选池里的列号还原成压缩行号",
+   "module": "attn",
+   "sub": "indexer top-k / 候选池",
+   "match": "^kernel_index_lift(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.wq_b",
+   "group": "attn",
+   "label": "wq_b：Q 上投影",
+   "short": "wq_b",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "[T,1280] → [T,16×512]（本 rank 16 个 head）",
+   "module": "attn",
+   "sub": "QKV 投影",
+   "est": {
+    "kind": "gemm",
+    "k": 1280,
+    "n": 32768,
+    "w_bits": 8,
+    "a_bits": 8,
+    "rows": "T",
+    "shard": "attn_tp",
+    "note": "[T,1280]→[T,H×512]，H=64（TP 时按 attn_tp 切分）"
+   },
+   "match": "^kernel_wq_b(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.rope_window",
+   "group": "attn",
+   "label": "RoPE + 量化 + 窗口写",
+   "short": "RoPE+窗口",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "q、kv 加 RoPE 并量化成 MXFP8；decode 顺带写 SWA 环",
+   "module": "attn",
+   "sub": "RoPE",
+   "match": "^kernel_rope_window(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.meta",
+   "group": "attn",
+   "label": "稀疏索引元数据",
+   "short": "索引元数据",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "每个 index 组的第一层建一次：indptr、tile 表、候选表、注意力下标",
+   "module": "attn",
+   "sub": "稀疏 MLA",
+   "shown": [
+    "L0",
+    "L2",
+    "L8",
+    "L14",
+    "L20",
+    "L24",
+    "L28",
+    "L32",
+    "L36"
+   ],
+   "match": "^kernel_meta(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.sparse_attn",
+   "group": "attn",
+   "label": "稀疏 attention",
+   "short": "attention",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "每个 query 读 ≤128 个 SWA + ≤512 个选中的压缩行 + sink；草稿块是 SWA + 块内双向",
+   "module": "attn",
+   "sub": "稀疏 MLA",
+   "match": "^kernel_sparse_attn(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.window_write",
+   "group": "attn",
+   "label": "SWA 窗口写入",
+   "short": "窗口写",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1"
+   ],
+   "what": "prefill 结束时把每个请求最后 128 行写进各层的 SWA 环",
+   "module": "attn",
+   "sub": "SWA 窗口 / 尾部行",
+   "phases": [
+    "prefill"
+   ],
+   "match": "^kernel_window_write(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.inv_rope_quant",
+   "group": "attn",
+   "label": "逆 RoPE + 量化",
+   "short": "逆RoPE量化",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "attention 输出去掉 RoPE，量化成 MXFP8，分 2 组",
+   "module": "attn",
+   "sub": "RoPE",
+   "match": "^kernel_inv_rope_quant(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.wo_a",
+   "group": "attn",
+   "label": "wo_a：分组输出投影",
+   "short": "wo_a",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "2 组 × [4096→1024]",
+   "module": "attn",
+   "sub": "o_proj（wo_a / wo_b）",
+   "est": {
+    "kind": "gemm",
+    "k": 4096,
+    "n": 8192,
+    "w_bits": 8,
+    "a_bits": 8,
+    "rows": "T",
+    "shard": "attn_tp",
+    "note": "8 组 ×[4096→1024]（TP4 时每 rank 2 组）"
+   },
+   "match": "^kernel_wo_a(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.wo_b",
+   "group": "attn",
+   "label": "wo_b：输出投影（含输入量化）",
+   "short": "wo_b",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "[T,2048] → MXFP8 → [T,5120] 部分和",
+   "module": "attn",
+   "sub": "o_proj（wo_a / wo_b）",
+   "est": {
+    "kind": "gemm",
+    "k": 8192,
+    "n": 5120,
+    "w_bits": 8,
+    "a_bits": 8,
+    "rows": "T",
+    "shard": "attn_tp_k",
+    "note": "[T,8192]→[T,5120]（TP 时 K 切分）"
+   },
+   "match": "^kernel_wo_b(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.allreduce",
+   "group": "attn",
+   "label": "TP all-reduce",
+   "short": "AR",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "4 个 rank 的 wo_b 部分和相加",
+   "module": "comm",
+   "sub": "attention AR",
+   "match": "^kernel_allreduce(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "attn.misc",
+   "group": "attn",
+   "label": "辅助 kernel",
+   "short": "辅助",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "PyTorch 小 kernel（主 KV 写页前的地址计算、拼接等）、split-K 归约",
+   "module": "misc",
+   "sub": "attention 辅助",
+   "opt": true,
+   "match": "^kernel_misc(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.mono_post",
+   "group": "ffn",
+   "label": "mono K2：v41_layer_post（旧 trace）",
+   "short": "mono K2",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "mono 把 attention 后半、FFN 接缝和整个 MoE 融成一个 kernel；本配置不走",
+   "module": "moe",
+   "sub": "mono 融合",
+   "phases": [
+    "decode"
+   ],
+   "opt": true,
+   "match": "^kernel_mono_post(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.tail_gather",
+   "group": "ffn",
+   "label": "取最后一行",
+   "short": "取最后行",
+   "kinds": null,
+   "what": "L39 的 FFN 只算每个请求的最后一行：先把 mHC 状态取到这些行",
+   "module": "moe",
+   "sub": "尾部行",
+   "phases": [
+    "prefill"
+   ],
+   "rows": [
+    "L39"
+   ],
+   "match": "^kernel_tail_gather(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.mhc_pre",
+   "group": "ffn",
+   "label": "mHC 接缝 + ffn_norm",
+   "short": "mHC 接缝",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "attention 的 post、FFN 的 pre、Sinkhorn、合成输入、RMSNorm（bf16 输出）",
+   "module": "moe",
+   "sub": "mHC",
+   "match": "^kernel_mhc_pre(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.ep_dispatch",
+   "group": "ffn",
+   "label": "MoE 前收集 token（DP attention）",
+   "short": "DP 收集",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "只在 DP attention 下出现：各 DP rank 的 token 先收集起来再进 MoE；半层里最后一次通信之前的通信都算这里",
+   "module": "comm",
+   "sub": "MoE dispatch / DP 收集",
+   "opt": true,
+   "match": "^kernel_ep_dispatch(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.ep_plan",
+   "group": "ffn",
+   "label": "EP dispatch 计划",
+   "short": "EP 计划",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "DEP 下按专家落点生成 dispatch 计划（compact route）",
+   "module": "comm",
+   "sub": "MoE dispatch / DP 收集",
+   "match": "^kernel_ep_plan(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.router",
+   "group": "ffn",
+   "label": "router",
+   "short": "router",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "[T,5120] → [T,384] 打分；草稿块是 128 个专家",
+   "module": "moe",
+   "sub": "router / gate GEMM",
+   "est": {
+    "kind": "gemm",
+    "k": 5120,
+    "n": 384,
+    "w_bits": 16,
+    "a_bits": 16,
+    "rows": "T",
+    "shard": null,
+    "note": "[T,5120]→[T,384]"
+   },
+   "match": "^kernel_router(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.topk_gating",
+   "group": "ffn",
+   "label": "选专家",
+   "short": "top-k 门控",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "sqrtsoftplus + bias，选 6 个（草稿块 3 个），归一化 ×1.5",
+   "module": "moe",
+   "sub": "top-k gating",
+   "match": "^kernel_topk_gating(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.moe_sort",
+   "group": "ffn",
+   "label": "MoE 排序",
+   "short": "MoE 排序",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "按本地专家排 token（EP：本 rank 96 个专家）",
+   "module": "moe",
+   "sub": "排序 / 量化",
+   "match": "^kernel_moe_sort(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.moe_quant",
+   "group": "ffn",
+   "label": "MoE 激活量化",
+   "short": "MoE 量化",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "激活 → MXFP8 并按排序写 scale（stage1 / stage2 各一次，若未融合）",
+   "module": "moe",
+   "sub": "排序 / 量化",
+   "match": "^kernel_moe_quant(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.moe_gemm1",
+   "group": "ffn",
+   "label": "MoE gate_up + SwiGLU",
+   "short": "MoE gemm1",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "A8W4，gate/up 交错，clamp SwiGLU(10)",
+   "module": "moe",
+   "sub": "grouped GEMM1 + act",
+   "est": {
+    "kind": "moe_gemm",
+    "k": 5120,
+    "n": 4608,
+    "w_bits": 4,
+    "a_bits": 8,
+    "rows": "T*topk",
+    "shard": "ep",
+    "note": "gate|up：5120→2×2304，A8W4；inter=2304 取自 kernel 名 K2304"
+   },
+   "match": "^kernel_moe_gemm1(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.moe_gemm2",
+   "group": "ffn",
+   "label": "MoE down + 加权",
+   "short": "MoE gemm2",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "A8W4 down 投影 × 路由权重，原子累加",
+   "module": "moe",
+   "sub": "grouped GEMM2",
+   "est": {
+    "kind": "moe_gemm",
+    "k": 2304,
+    "n": 5120,
+    "w_bits": 4,
+    "a_bits": 8,
+    "rows": "T*topk",
+    "shard": "ep",
+    "note": "down：2304→5120，A8W4"
+   },
+   "match": "^kernel_moe_gemm2(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.ep_combine",
+   "group": "ffn",
+   "label": "MoE combine（EP 回收 / gather-reduce）",
+   "short": "combine",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "EP 下把各 rank 专家输出按权重收回本 rank（含同步）",
+   "module": "comm",
+   "sub": "MoE combine / reduce",
+   "match": "^kernel_ep_combine(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.shared_gate_up",
+   "group": "ffn",
+   "label": "shared gate_up（含输入量化）",
+   "short": "shared g/u",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "x → MXFP8 → [T,1152]（本 rank 576×2；副 stream，与 routed 并行）",
+   "module": "moe",
+   "sub": "shared expert",
+   "est": {
+    "kind": "gemm",
+    "k": 5120,
+    "n": 4608,
+    "w_bits": 8,
+    "a_bits": 8,
+    "rows": "T",
+    "shard": "tp",
+    "note": "shared gate|up：5120→2×2304（TP 切分 n）"
+   },
+   "match": "^kernel_shared_gate_up(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.shared_act",
+   "group": "ffn",
+   "label": "shared SwiGLU",
+   "short": "shared act",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "clamp(10) SiLU·up",
+   "module": "moe",
+   "sub": "shared expert",
+   "match": "^kernel_shared_act(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.shared_down",
+   "group": "ffn",
+   "label": "shared down（含输入量化）",
+   "short": "shared down",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "[T,576] → [T,5120]，不单独 reduce",
+   "module": "moe",
+   "sub": "shared expert",
+   "est": {
+    "kind": "gemm",
+    "k": 2304,
+    "n": 5120,
+    "w_bits": 8,
+    "a_bits": 8,
+    "rows": "T",
+    "shard": "tp_k",
+    "note": "shared down：2304→5120"
+   },
+   "match": "^kernel_shared_down(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.allreduce",
+   "group": "ffn",
+   "label": "TP all-reduce",
+   "short": "AR",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "routed（EP 部分专家）+ shared（TP 分片）一起求和；EP 下没有 all-to-all。DP attention 下这里是把结果分回各 rank 的 reduce-scatter",
+   "module": "comm",
+   "sub": "MoE AR / reduce-scatter",
+   "match": "^kernel_allreduce(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "ffn.misc",
+   "group": "ffn",
+   "label": "辅助 kernel",
+   "short": "辅助",
+   "kinds": [
+    "swa",
+    "full2",
+    "reuse2",
+    "full1",
+    "reindex",
+    "reuse1",
+    "draft"
+   ],
+   "what": "routed + shared 相加（torch add）等",
+   "module": "misc",
+   "sub": "FFN 辅助",
+   "match": "^kernel_misc(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "epi.settle",
+   "group": "epi",
+   "label": "结清最后的 mHC post",
+   "short": "mHC post",
+   "kinds": null,
+   "what": "L39 FFN 欠的 post",
+   "module": "epi",
+   "sub": "mHC 收尾",
+   "match": "^kernel_settle(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "epi.collapse",
+   "group": "epi",
+   "label": "4 路残差合成",
+   "short": "合成",
+   "kinds": null,
+   "what": "按 pre-mix 把 4 路残差加成 [T,5120]",
+   "module": "epi",
+   "sub": "mHC 收尾",
+   "match": "^kernel_collapse(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "epi.final_norm",
+   "group": "epi",
+   "label": "final norm",
+   "short": "final norm",
+   "kinds": null,
+   "what": "RMSNorm（TP4 时在 graph 外）",
+   "module": "epi",
+   "sub": "lm_head",
+   "match": "^kernel_final_norm(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "epi.lm_head",
+   "group": "epi",
+   "label": "LM head",
+   "short": "LM head",
+   "kinds": null,
+   "what": "[T,5120] × [32320,5120]ᵀ（本 rank 的词表分片）",
+   "module": "epi",
+   "sub": "lm_head",
+   "est": {
+    "kind": "gemm",
+    "k": 5120,
+    "n": 129280,
+    "w_bits": 16,
+    "a_bits": 16,
+    "rows": "T_logits",
+    "shard": "tp",
+    "note": "[T,5120]→[T,129280]（TP 时词表切分）"
+   },
+   "match": "^kernel_lm_head(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "epi.logits_gather",
+   "group": "epi",
+   "label": "logits all-gather",
+   "short": "logits gather",
+   "kinds": null,
+   "what": "拼回 [T,129280]",
+   "module": "comm",
+   "sub": "logits gather",
+   "match": "^kernel_logits_gather(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "epi.sample",
+   "group": "epi",
+   "label": "采样",
+   "short": "采样",
+   "kinds": null,
+   "what": "Gumbel-max 或 argmax",
+   "module": "epi",
+   "sub": "采样",
+   "match": "^kernel_sample(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "epi.verify",
+   "group": "epi",
+   "label": "草稿验证",
+   "short": "验证",
+   "kinds": null,
+   "what": "比对 5 个草稿 token，决定接受几个",
+   "module": "epi",
+   "sub": "DSpark 验证",
+   "phases": [
+    "decode"
+   ],
+   "match": "^kernel_verify(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "epi.broadcast",
+   "group": "epi",
+   "label": "TP 广播",
+   "short": "广播",
+   "kinds": null,
+   "what": "rank 0 的采样结果广播给其他 rank",
+   "module": "comm",
+   "sub": "采样广播",
+   "match": "^kernel_broadcast(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "epi.commit",
+   "group": "epi",
+   "label": "提交 Engram 游标",
+   "short": "提交游标",
+   "kinds": null,
+   "what": "按接受长度提交游标",
+   "module": "epi",
+   "sub": "DSpark 验证",
+   "phases": [
+    "decode"
+   ],
+   "match": "^kernel_commit(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "epi.misc",
+   "group": "epi",
+   "label": "辅助 kernel",
+   "short": "辅助",
+   "kinds": null,
+   "what": "index_select、bounded replay 的输出清零与回填、D2H 等",
+   "module": "misc",
+   "sub": "收尾辅助",
+   "match": "^kernel_misc(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dkv.main_proj",
+   "group": "dkv",
+   "label": "草稿 KV：main_proj（含输入量化）",
+   "short": "main_proj",
+   "kinds": null,
+   "what": "15360 → 5120",
+   "module": "dspark",
+   "sub": "草稿 KV",
+   "match": "^kernel_main_proj(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dkv.main_norm",
+   "group": "dkv",
+   "label": "草稿 KV：main_norm",
+   "short": "main_norm",
+   "kinds": null,
+   "what": "RMSNorm",
+   "module": "dspark",
+   "sub": "草稿 KV",
+   "match": "^kernel_main_norm(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dkv.wkv",
+   "group": "dkv",
+   "label": "草稿 KV：3 块 wkv（含输入量化）",
+   "short": "wkv",
+   "kinds": null,
+   "what": "5120 → 3×512，三个草稿块一起算",
+   "module": "dspark",
+   "sub": "草稿 KV",
+   "match": "^kernel_wkv(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dkv.kv_tail",
+   "group": "dkv",
+   "label": "草稿 KV：norm + RoPE + 量化",
+   "short": "KV 尾处理",
+   "kinds": null,
+   "what": "",
+   "module": "dspark",
+   "sub": "草稿 KV",
+   "match": "^kernel_kv_tail(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dkv.window_write",
+   "group": "dkv",
+   "label": "草稿 KV：写 3 个窗口",
+   "short": "写窗口",
+   "kinds": null,
+   "what": "写草稿层 40–42 的 SWA 环",
+   "module": "dspark",
+   "sub": "草稿 KV",
+   "match": "^kernel_window_write(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dkv.stage",
+   "group": "dkv",
+   "label": "草稿：准备 anchor 与窗口",
+   "short": "准备",
+   "kinds": null,
+   "what": "anchor id/位置、读 3 个 FP8 窗口、块内位置与双向下标",
+   "module": "dspark",
+   "sub": "草稿准备",
+   "match": "^kernel_stage(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dkv.embed",
+   "group": "dkv",
+   "label": "草稿：anchor embedding",
+   "short": "embedding",
+   "kinds": null,
+   "what": "",
+   "module": "dspark",
+   "sub": "草稿准备",
+   "match": "^kernel_embed(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dkv.embed_ar",
+   "group": "dkv",
+   "label": "草稿：embedding all-reduce",
+   "short": "emb AR",
+   "kinds": null,
+   "what": "",
+   "module": "comm",
+   "sub": "草稿 embedding AR",
+   "match": "^kernel_embed_ar(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dkv.block_state",
+   "group": "dkv",
+   "label": "草稿：块初始状态",
+   "short": "块状态",
+   "kinds": null,
+   "what": "第 0 列 anchor，1–4 列 noise embedding，组成 mHC 残差",
+   "module": "dspark",
+   "sub": "草稿准备",
+   "match": "^kernel_block_state(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dhd.settle",
+   "group": "dhd",
+   "label": "草稿：结清 mHC + 合成",
+   "short": "mHC 收尾",
+   "kinds": null,
+   "what": "",
+   "module": "dspark",
+   "sub": "草稿头",
+   "match": "^kernel_settle(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dhd.final_norm",
+   "group": "dhd",
+   "label": "草稿：final norm",
+   "short": "final norm",
+   "kinds": null,
+   "what": "",
+   "module": "dspark",
+   "sub": "草稿头",
+   "match": "^kernel_final_norm(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dhd.lm_head",
+   "group": "dhd",
+   "label": "草稿：LM head（不 gather）",
+   "short": "LM head",
+   "kinds": null,
+   "what": "[B·5, 32320]，保持词表分片",
+   "module": "dspark",
+   "sub": "草稿头",
+   "match": "^kernel_lm_head(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dhd.markov",
+   "group": "dhd",
+   "label": "Markov 头 ×5",
+   "short": "Markov ×5",
+   "kinds": null,
+   "what": "5 步串行：rank-256 bias + 分片 argmax，再跨 rank 取最大",
+   "module": "dspark",
+   "sub": "草稿头",
+   "match": "^kernel_markov(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dhd.confidence",
+   "group": "dhd",
+   "label": "置信度头",
+   "short": "置信度",
+   "kinds": null,
+   "what": "固定宽度时算了但不用",
+   "module": "dspark",
+   "sub": "草稿头",
+   "match": "^kernel_confidence(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  },
+  {
+   "id": "dhd.misc",
+   "group": "dhd",
+   "label": "辅助 kernel",
+   "short": "辅助",
+   "kinds": null,
+   "what": "cat、sigmoid、输出 clone 等",
+   "module": "misc",
+   "sub": "草稿辅助",
+   "match": "^kernel_misc(_\\w+)?$",
+   "impl": "示例占位",
+   "src": "—"
+  }
+ ]
+}
